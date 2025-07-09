@@ -9,14 +9,14 @@ import { isObjectEmpty, handleResponse } from './Utils';
 let sftp = null;
 
 /**
- * Execute a sequence of operations.
- * Wraps `language-common/execute`, and prepends initial state for http.
+ * Execute a sequence of operations with automatic connection management.
+ * Wraps `language-common/execute`, and prepends initial state for sftp.
  * @example
  * execute(
- *   create('foo'),
- *   delete('bar')
+ *   list('/some/path/'),
+ *   getCSV('/data.csv')
  * )(state)
- * @private
+ * @public
  * @param {Operations} operations - Operations to be performed.
  * @returns {Operation}
  */
@@ -37,7 +37,52 @@ export function execute(...operations) {
     });
 }
 
-function connect(state) {
+/**
+ * Execute a sequence of operations with manual connection management.
+ * Use this when you want to control SFTP connection/disconnection manually within your job.
+ * @example
+ * executeManual(
+ *   connect,
+ *   list('/some/path/'),
+ *   getCSV('/data.csv'),
+ *   disconnect
+ * )(state)
+ * @public
+ * @param {Operations} operations - Operations to be performed.
+ * @returns {Operation}
+ */
+export function executeManual(...operations) {
+  const initialState = {
+    references: [],
+    data: null,
+  };
+
+  return state =>
+    commonExecute(
+      ...operations
+    )({ ...initialState, ...state }).catch(e => {
+      // Attempt graceful cleanup if still connected
+      if (sftp && sftp.sftp) {
+        console.log('Cleaning up SFTP connection due to error');
+        disconnect(state).catch(() => {}); // Ignore cleanup errors
+      }
+      throw e;
+    });
+}
+
+/**
+ * Connect to SFTP server
+ * @public
+ * @example
+ * executeManual(
+ *   connect,
+ *   list('/some/path/'),
+ *   disconnect
+ * )(state)
+ * @function
+ * @returns {Operation}
+ */
+export function connect(state) {
   sftp = new Client();
 
   // Clean configuration to handle URI schemes
@@ -60,10 +105,24 @@ function connect(state) {
   });
 }
 
-function disconnect(state) {
+/**
+ * Disconnect from SFTP server
+ * @public
+ * @example
+ * executeManual(
+ *   connect,
+ *   list('/some/path/'),
+ *   disconnect
+ * )(state)
+ * @function
+ * @returns {Operation}
+ */
+export function disconnect(state) {
   console.log('Disconnected');
-  sftp.end();
-  sftp = undefined;
+  if (sftp) {
+    sftp.end();
+    sftp = undefined;
+  }
   return state;
 }
 
