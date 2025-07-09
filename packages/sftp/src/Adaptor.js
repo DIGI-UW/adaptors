@@ -32,7 +32,27 @@ export function execute(...operations) {
       ...operations,
       disconnect
     )({ ...initialState, ...state }).catch(e => {
-      disconnect(state);
+      console.error('❌ SFTP: execute encountered error:', e.message);
+      console.log('🔄 SFTP: Attempting emergency disconnection...');
+      
+      try {
+        disconnect(state);
+        console.log('✅ SFTP: Emergency disconnection completed');
+      } catch (cleanupError) {
+        console.warn('⚠️  SFTP: Error during emergency disconnection:', cleanupError.message);
+        // Force cleanup
+        if (sftp) {
+          try {
+            sftp.end();
+            sftp = undefined;
+            console.log('🔧 SFTP: Forced cleanup completed');
+          } catch (forceError) {
+            console.warn('⚠️  SFTP: Force cleanup also failed:', forceError.message);
+            sftp = undefined;
+          }
+        }
+      }
+      
       throw e;
     });
 }
@@ -61,11 +81,35 @@ export function executeManual(...operations) {
     commonExecute(
       ...operations
     )({ ...initialState, ...state }).catch(e => {
+      console.error('❌ SFTP: executeManual encountered error:', e.message);
+      
       // Attempt graceful cleanup if still connected
-      if (sftp && sftp.sftp) {
-        console.log('Cleaning up SFTP connection due to error');
-        disconnect(state).catch(() => {}); // Ignore cleanup errors
+      if (sftp) {
+        try {
+          const isConnected = sftp.sftp && sftp.sftp.state === 'ready';
+          if (isConnected) {
+            console.log('🔄 SFTP: Attempting graceful disconnection due to error...');
+            sftp.end();
+            console.log('✅ SFTP: Emergency disconnection completed');
+          } else {
+            console.log('ℹ️  SFTP: Connection already closed, no cleanup needed');
+          }
+        } catch (cleanupError) {
+          console.warn('⚠️  SFTP: Error during emergency cleanup:', cleanupError.message);
+          // Force cleanup
+          try {
+            sftp = undefined;
+            console.log('🔧 SFTP: Forced cleanup completed');
+          } catch (forceError) {
+            console.warn('⚠️  SFTP: Force cleanup also failed:', forceError.message);
+          }
+        } finally {
+          sftp = undefined;
+        }
+      } else {
+        console.log('ℹ️  SFTP: No active connection to clean up');
       }
+      
       throw e;
     });
 }
@@ -83,6 +127,17 @@ export function executeManual(...operations) {
  * @returns {Operation}
  */
 export function connect(state) {
+  console.log('🔗 SFTP: Initializing connection...');
+  
+  if (sftp && sftp.sftp) {
+    console.log('⚠️  SFTP: Connection already exists, closing previous connection');
+    try {
+      sftp.end();
+    } catch (e) {
+      console.warn('⚠️  SFTP: Error closing previous connection:', e.message);
+    }
+  }
+  
   sftp = new Client();
 
   // Clean configuration to handle URI schemes
@@ -90,18 +145,59 @@ export function connect(state) {
   
   // Remove URI scheme from host if present
   if (cleanedConfig.host && typeof cleanedConfig.host === 'string') {
+    const originalHost = cleanedConfig.host;
     cleanedConfig.host = cleanedConfig.host.replace(/^(sftp|ftp):\/\//, '');
+    if (originalHost !== cleanedConfig.host) {
+      console.log(`🔧 SFTP: Cleaned host URI '${originalHost}' → '${cleanedConfig.host}'`);
+    }
   }
   
-  console.log('Connecting to SFTP server:', {
+  // Validate required configuration
+  if (!cleanedConfig.host) {
+    const error = new Error('SFTP connection failed: host is required in configuration');
+    console.error('❌ SFTP:', error.message);
+    throw error;
+  }
+  
+  const connectionInfo = {
     host: cleanedConfig.host,
     port: cleanedConfig.port || 22,
     username: cleanedConfig.username || 'anonymous'
-  });
+  };
+  
+  console.log('🔗 SFTP: Attempting connection to:', connectionInfo);
+  console.log('🔗 SFTP: Connection timeout: 10000ms');
 
-  return sftp.connect(cleanedConfig).then(() => {
-    console.log('Connected');
+  const connectConfig = {
+    ...cleanedConfig,
+    readyTimeout: 10000, // 10 second timeout
+    retries: 1
+  };
+
+  return sftp.connect(connectConfig).then(() => {
+    console.log('✅ SFTP: Successfully connected to', `${connectionInfo.host}:${connectionInfo.port}`);
+    console.log('✅ SFTP: Connection ready for operations');
     return state;
+  }).catch(error => {
+    console.error('❌ SFTP: Connection failed to', `${connectionInfo.host}:${connectionInfo.port}`);
+    console.error('❌ SFTP: Error details:', error.message);
+    console.error('❌ SFTP: Error code:', error.code || 'UNKNOWN');
+    
+    // Provide helpful error context
+    if (error.code === 'ENOTFOUND') {
+      console.error('💡 SFTP: DNS lookup failed - check host address');
+    } else if (error.code === 'ECONNREFUSED') {
+      console.error('💡 SFTP: Connection refused - check port and firewall');
+    } else if (error.code === 'ETIMEDOUT') {
+      console.error('💡 SFTP: Connection timeout - check network connectivity');
+    } else if (error.message.includes('authentication')) {
+      console.error('💡 SFTP: Authentication failed - check username/password');
+    }
+    
+    const enhancedError = new Error(`SFTP connection failed to ${connectionInfo.host}:${connectionInfo.port}: ${error.message}`);
+    enhancedError.originalError = error;
+    enhancedError.connectionInfo = connectionInfo;
+    throw enhancedError;
   });
 }
 
@@ -118,11 +214,23 @@ export function connect(state) {
  * @returns {Operation}
  */
 export function disconnect(state) {
-  console.log('Disconnected');
-  if (sftp) {
+  console.log('🔌 SFTP: Disconnecting...');
+  
+  if (!sftp) {
+    console.log('ℹ️  SFTP: No active connection to disconnect');
+    return state;
+  }
+  
+  try {
     sftp.end();
+    console.log('✅ SFTP: Successfully disconnected');
+  } catch (error) {
+    console.warn('⚠️  SFTP: Error during disconnection:', error.message);
+    // Don't throw on disconnect errors, just warn
+  } finally {
     sftp = undefined;
   }
+  
   return state;
 }
 
@@ -157,9 +265,76 @@ export function disconnect(state) {
  */
 export function list(dirPath, filter, callback) {
   return state => {
+    console.log('📂 SFTP: Starting directory listing...');
+    
+    // Validate connection
+    if (!sftp || !sftp.sftp) {
+      const error = new Error('SFTP operation failed: not connected to server');
+      console.error('❌ SFTP:', error.message);
+      console.error('💡 SFTP: Make sure to call connect() before list()');
+      throw error;
+    }
+    
+    // Validate directory path
+    if (!dirPath || typeof dirPath !== 'string') {
+      const error = new Error('SFTP list failed: dirPath must be a non-empty string');
+      console.error('❌ SFTP:', error.message);
+      console.error('💡 SFTP: Provided dirPath:', dirPath);
+      throw error;
+    }
+    
+    console.log('📂 SFTP: Listing directory:', dirPath);
+    if (filter && typeof filter === 'function') {
+      console.log('🔍 SFTP: Filter function provided');
+    }
+    
+    const startTime = Date.now();
+    
     return sftp
       .list(dirPath, filter)
-      .then(files => handleResponse(files, state, callback));
+      .then(files => {
+        const duration = Date.now() - startTime;
+        console.log('✅ SFTP: Directory listing completed in', `${duration}ms`);
+        console.log('📊 SFTP: Found', files.length, 'items');
+        
+        if (files.length > 0) {
+          console.log('📋 SFTP: First few items:');
+          files.slice(0, 3).forEach((file, index) => {
+            const type = file.type === 'd' ? '📁' : '📄';
+            const size = file.type === 'd' ? '' : ` (${file.size} bytes)`;
+            console.log(`  ${index + 1}. ${type} ${file.name}${size}`);
+          });
+          if (files.length > 3) {
+            console.log(`  ... and ${files.length - 3} more items`);
+          }
+        } else {
+          console.log('📭 SFTP: Directory is empty');
+        }
+        
+        return handleResponse(files, state, callback);
+      })
+      .catch(error => {
+        const duration = Date.now() - startTime;
+        console.error('❌ SFTP: Directory listing failed after', `${duration}ms`);
+        console.error('❌ SFTP: Directory path:', dirPath);
+        console.error('❌ SFTP: Error details:', error.message);
+        console.error('❌ SFTP: Error code:', error.code || 'UNKNOWN');
+        
+        // Provide helpful error context
+        if (error.code === 'ENOENT' || error.message.includes('No such file')) {
+          console.error('💡 SFTP: Directory not found - check the path exists');
+        } else if (error.code === 'EACCES' || error.message.includes('permission')) {
+          console.error('💡 SFTP: Permission denied - check directory permissions');
+        } else if (error.message.includes('not connected')) {
+          console.error('💡 SFTP: Connection lost - try reconnecting');
+        }
+        
+        const enhancedError = new Error(`SFTP list operation failed for '${dirPath}': ${error.message}`);
+        enhancedError.originalError = error;
+        enhancedError.dirPath = dirPath;
+        enhancedError.operation = 'list';
+        throw enhancedError;
+      });
   };
 }
 
@@ -186,36 +361,116 @@ export function getCSV(filePath, parsingOptions = {}) {
   };
 
   return state => {
+    console.log('📄 SFTP: Starting CSV download...');
+    
+    // Validate connection
+    if (!sftp || !sftp.sftp) {
+      const error = new Error('SFTP operation failed: not connected to server');
+      console.error('❌ SFTP:', error.message);
+      console.error('💡 SFTP: Make sure to call connect() before getCSV()');
+      throw error;
+    }
+    
+    // Validate file path
+    if (!filePath || typeof filePath !== 'string') {
+      const error = new Error('SFTP getCSV failed: filePath must be a non-empty string');
+      console.error('❌ SFTP:', error.message);
+      console.error('💡 SFTP: Provided filePath:', filePath);
+      throw error;
+    }
+    
+    console.log('📄 SFTP: Downloading CSV file:', filePath);
+    
     let results = [];
+    const startTime = Date.now();
 
     const { readStreamOptions, ...csvDefaultOptions } = defaultOptions;
     const useParser = !isObjectEmpty(parsingOptions);
+    
+    if (useParser) {
+      console.log('🔧 SFTP: Using CSV parser with options:', parsingOptions);
+    } else {
+      console.log('🔧 SFTP: Using simple CSV processing');
+    }
 
     if (useParser) {
       const stream = sftp.createReadStream(filePath, readStreamOptions);
       return parseCsv(stream, { ...csvDefaultOptions, ...parsingOptions })(
         state
-      );
+      ).catch(error => {
+        const duration = Date.now() - startTime;
+        console.error('❌ SFTP: CSV parsing failed after', `${duration}ms`);
+        console.error('❌ SFTP: File path:', filePath);
+        console.error('❌ SFTP: Error details:', error.message);
+        
+        const enhancedError = new Error(`SFTP CSV parsing failed for '${filePath}': ${error.message}`);
+        enhancedError.originalError = error;
+        enhancedError.filePath = filePath;
+        enhancedError.operation = 'getCSV';
+        enhancedError.parsingOptions = parsingOptions;
+        throw enhancedError;
+      });
     } else {
       return sftp
         .get(filePath)
         .then(chunk => {
+          console.log('📥 SFTP: Downloaded chunk of size:', chunk.length, 'bytes');
           results.push(chunk);
         })
         .then(() => {
-          console.debug('Parsing rows to JSON.\n');
-          console.time('Stream finished');
+          const duration = Date.now() - startTime;
+          console.log('✅ SFTP: File download completed in', `${duration}ms`);
+          console.log('🔧 SFTP: Parsing CSV content...');
+          console.time('CSV parsing');
+          
           return new Promise((resolve, reject) => {
-            const content = Buffer.concat(results).toString('utf8');
-            resolve(content.split('\r\n'));
+            try {
+              const content = Buffer.concat(results).toString('utf8');
+              console.log('📊 SFTP: CSV content size:', content.length, 'characters');
+              
+              const lines = content.split('\r\n');
+              console.log('📊 SFTP: CSV lines count:', lines.length);
+              
+              resolve(lines);
+            } catch (error) {
+              console.error('❌ SFTP: CSV content parsing failed:', error.message);
+              reject(error);
+            }
           }).then(json => {
+            console.timeEnd('CSV parsing');
+            console.log('✅ SFTP: CSV parsing completed successfully');
+            
             const nextState = composeNextState(state, json);
             return nextState;
           });
         })
         .then(state => {
-          console.timeEnd('Stream finished');
+          const totalDuration = Date.now() - startTime;
+          console.log('🎉 SFTP: CSV operation completed in', `${totalDuration}ms`);
           return state;
+        })
+        .catch(error => {
+          const duration = Date.now() - startTime;
+          console.error('❌ SFTP: CSV download failed after', `${duration}ms`);
+          console.error('❌ SFTP: File path:', filePath);
+          console.error('❌ SFTP: Error details:', error.message);
+          console.error('❌ SFTP: Error code:', error.code || 'UNKNOWN');
+          
+          // Provide helpful error context
+          if (error.code === 'ENOENT' || error.message.includes('No such file')) {
+            console.error('💡 SFTP: File not found - check the file path exists');
+          } else if (error.code === 'EACCES' || error.message.includes('permission')) {
+            console.error('💡 SFTP: Permission denied - check file permissions');
+          } else if (error.message.includes('not connected')) {
+            console.error('💡 SFTP: Connection lost - try reconnecting');
+          }
+          
+          const enhancedError = new Error(`SFTP CSV download failed for '${filePath}': ${error.message}`);
+          enhancedError.originalError = error;
+          enhancedError.filePath = filePath;
+          enhancedError.operation = 'getCSV';
+          enhancedError.parsingOptions = parsingOptions;
+          throw enhancedError;
         });
     }
   };
