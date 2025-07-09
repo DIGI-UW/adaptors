@@ -40,7 +40,21 @@ export function execute(...operations) {
 function connect(state) {
   sftp = new Client();
 
-  return sftp.connect(state.configuration).then(() => {
+  // Clean configuration to handle URI schemes
+  const cleanedConfig = { ...state.configuration };
+  
+  // Remove URI scheme from host if present
+  if (cleanedConfig.host && typeof cleanedConfig.host === 'string') {
+    cleanedConfig.host = cleanedConfig.host.replace(/^(sftp|ftp):\/\//, '');
+  }
+  
+  console.log('Connecting to SFTP server:', {
+    host: cleanedConfig.host,
+    port: cleanedConfig.port || 22,
+    username: cleanedConfig.username || 'anonymous'
+  });
+
+  return sftp.connect(cleanedConfig).then(() => {
     console.log('Connected');
     return state;
   });
