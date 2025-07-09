@@ -1,8 +1,8 @@
 {
   "name": "@openfn/language-sftp",
   "label": "SFTP",
-  "version": "3.0.3",
-  "description": "OpenFn adaptor for SFTP",
+  "version": "2.0.17-custom-enhanced",
+  "description": "An SFTP language package for use with Open Function (Enhanced with URI fixing, manual connection control, and comprehensive logging)",
   "homepage": "https://docs.openfn.org",
   "repository": {
     "type": "git",
