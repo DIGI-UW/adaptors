@@ -1,0 +1,45 @@
+# Build custom OpenFn adaptors inside Docker container
+FROM node:18-alpine
+
+# Install pnpm and other build tools
+RUN npm install -g pnpm@8.15.0
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy the entire adaptors monorepo
+COPY . .
+
+# Install dependencies and build all adaptors
+RUN pnpm install
+
+# Build all packages (common, http, sftp)
+RUN pnpm -C packages/common build
+RUN pnpm -C packages/http build
+RUN pnpm -C packages/sftp build
+
+# Create output directory structure for all packages
+RUN mkdir -p /output/packages/common && \
+    mkdir -p /output/packages/http && \
+    mkdir -p /output/packages/sftp
+
+# Copy common package
+RUN cp -r packages/common/dist/* /output/packages/common/ && \
+    cp packages/common/package.json /output/packages/common/ && \
+    if [ -f "packages/common/configuration-schema.json" ]; then cp packages/common/configuration-schema.json /output/packages/common/; fi && \
+    if [ -d "packages/common/assets" ]; then cp -r packages/common/assets /output/packages/common/; fi
+
+# Copy http package
+RUN cp -r packages/http/dist/* /output/packages/http/ && \
+    cp packages/http/package.json /output/packages/http/ && \
+    if [ -f "packages/http/configuration-schema.json" ]; then cp packages/http/configuration-schema.json /output/packages/http/; fi && \
+    if [ -d "packages/http/assets" ]; then cp -r packages/http/assets /output/packages/http/; fi
+
+# Copy sftp package
+RUN cp -r packages/sftp/dist/* /output/packages/sftp/ && \
+    cp packages/sftp/package.json /output/packages/sftp/ && \
+    if [ -f "packages/sftp/configuration-schema.json" ]; then cp packages/sftp/configuration-schema.json /output/packages/sftp/; fi && \
+    if [ -d "packages/sftp/assets" ]; then cp -r packages/sftp/assets /output/packages/sftp/; fi
+
+# Default command outputs the build
+CMD ["ls", "-la", "/output/packages/"] 

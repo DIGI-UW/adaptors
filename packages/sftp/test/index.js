@@ -1,50 +1,56 @@
+import * as td from 'testdouble';
 import { expect } from 'chai';
 
-import { execute } from '../src';
-
 describe('The execute() function', () => {
-  it.skip('executes each operation in sequence', done => {
-    const state = {
-      configuration: {
-        host: 'localhost',
-        port: '22',
-        username: 'openfn',
-        password: 'somePassword(!)',
-      },
-    };
-    const operations = [
-      state => {
-        return { counter: 1 };
-      },
-      state => {
-        return { counter: 2 };
-      },
-      state => {
-        return { counter: 3 };
-      },
-    ];
+  let execute, connect, disconnect;
+  let mockSftpClient;
 
-    execute(...operations)(state)
-      .then(finalState => {
-        expect(finalState).to.eql({ counter: 3 });
-      })
-      .then(done)
-      .catch(done);
+  before(async () => {
+    // Create a mock SFTP client
+    mockSftpClient = {
+      connect: td.func(),
+      end: td.func(),
+      sftp: { state: 'ready' }
+    };
+
+    // Set up stubs for the mock client
+    td.when(mockSftpClient.connect(td.matchers.anything())).thenResolve();
+    td.when(mockSftpClient.end()).thenResolve();
+
+    // Create a mock constructor that returns our mock client
+    const MockClient = td.func();
+    td.when(new MockClient()).thenReturn(mockSftpClient);
+
+    // Mock the ssh2-sftp-client module
+    await td.replaceEsm('ssh2-sftp-client', { default: MockClient });
+
+    // Import the adaptor functions
+    ({ execute, connect, disconnect } = await import('../src/Adaptor.js'));
   });
 
-  it.skip('assigns references, data to the initialState', done => {
-    let state = {};
+  after(() => {
+    td.reset();
+  });
 
-    let finalState = execute()(state);
+  it('should connect to SFTP server', async () => {
+    const state = { configuration: { host: 'test-host' } };
+    const result = await connect(state);
+    
+    // The connect function should return the state unchanged
+    expect(result).to.deep.equal(state);
+    
+    // Verify that the mock client's connect method was called
+    td.verify(mockSftpClient.connect(td.matchers.anything()));
+  });
 
-    execute()(state)
-      .then(finalState => {
-        expect(finalState).to.eql({
-          references: [],
-          data: null,
-        });
-      })
-      .then(done)
-      .catch(done);
+  it('should disconnect from SFTP server', async () => {
+    const state = { configuration: { host: 'test-host' } };
+    const result = await disconnect(state);
+    
+    // The disconnect function should return the state unchanged
+    expect(result).to.deep.equal(state);
+    
+    // Verify that the mock client's end method was called
+    td.verify(mockSftpClient.end());
   });
 });

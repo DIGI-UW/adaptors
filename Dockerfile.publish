@@ -1,0 +1,49 @@
+# Dockerfile for building and publishing custom SFTP adaptor to npm
+FROM node:18-alpine
+
+# Install pnpm for building
+RUN npm install -g pnpm@8.15.0
+
+WORKDIR /workspace
+
+# Copy the entire adaptors monorepo
+COPY . .
+
+# Accept build args
+ARG DEV_VERSION=2.0.14-dev-latest
+ARG NPM_TOKEN
+
+# Install dependencies and build
+RUN pnpm install
+
+# Update package.json with scoped name and dev version
+RUN cd packages/sftp && \
+    # Change name to completely different package to avoid conflicts
+    npm pkg set name="@pmanko/sftp-fixed" && \
+    # Set dev version
+    npm pkg set version="$DEV_VERSION" && \
+    # Update description to indicate it's a dev build
+    npm pkg set description="Fixed SFTP adaptor with URI support (dev build $DEV_VERSION)" && \
+    # Build the package
+    pnpm build
+
+# Set up npm authentication and publish
+RUN cd packages/sftp && \
+    # Check if NPM_TOKEN is provided
+    if [ -z "$NPM_TOKEN" ]; then \
+        echo "❌ NPM_TOKEN not provided as build argument" && exit 1; \
+    fi && \
+    # Configure npm with token from build arg
+    echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc && \
+    echo "registry=https://registry.npmjs.org/" >> ~/.npmrc && \
+    # Show package info for debugging
+    echo "📦 Package info:" && \
+    npm pkg get name version description && \
+    # Publish to npm with verbose output
+    echo "🚀 Publishing to npm..." && \
+    npm publish --access public --loglevel verbose && \
+    # Clean up token
+    rm ~/.npmrc
+
+# Default command (optional - mainly for debugging)
+CMD ["echo", "SFTP adaptor published successfully"] 

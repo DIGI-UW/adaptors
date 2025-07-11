@@ -19,7 +19,7 @@
   "main": "dist/index.cjs",
   "scripts": {
     "build": "pnpm clean && build-adaptor sftp",
-    "test": "mocha --experimental-specifier-resolution=node --no-warnings",
+    "test": "mocha --experimental-specifier-resolution=node --no-warnings test/*.js",
     "test:watch": "mocha -w --experimental-specifier-resolution=node --no-warnings",
     "clean": "rimraf dist types docs",
     "pack": "pnpm pack --pack-destination ../../dist",
@@ -36,17 +36,20 @@
   "dependencies": {
     "@openfn/language-common": "workspace:*",
     "lodash": "^4.17.21",
-    "ssh2-sftp-client": "9.0.4"
+    "ssh2-sftp-client": "9.0.4",
+    "xlstream": "^2.5.5"
   },
   "devDependencies": {
     "assertion-error": "2.0.0",
-    "chai": "4.3.6",
+    "chai": "^4.3.7",
     "deep-eql": "4.1.1",
     "eslint": "8.26.0",
     "eslint-config-airbnb-base": "15.0.0",
     "eslint-plugin-import": "2.26.0",
+    "mocha": "^10.2.0",
     "nock": "12.0.3",
-    "rimraf": "^3.0.2"
+    "rimraf": "^3.0.2",
+    "testdouble": "^3.16.9"
   },
   "type": "module",
   "types": "types/index.d.ts"
