@@ -121,3 +121,5 @@ dist
 .idea
 
 /pnpm-publish-summary.json
+
+.pnpm-store/

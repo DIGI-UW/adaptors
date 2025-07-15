@@ -1,45 +1,40 @@
 # Build custom OpenFn adaptors inside Docker container
-FROM node:18-alpine
+FROM ubuntu:22.04
 
-# Install pnpm and other build tools
-RUN npm install -g pnpm@8.15.0
+# Install required dependencies including Python for node-gyp
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    python3 \
+    python3-dev \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install asdf
+RUN git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.14.0
+
+# Set up asdf environment properly
+ENV PATH="/root/.asdf/bin:/root/.asdf/shims:$PATH"
+ENV ASDF_DIR="/root/.asdf"
+RUN echo 'source ~/.asdf/asdf.sh' >> ~/.bashrc
 
 # Set working directory
 WORKDIR /workspace
 
-# Copy the entire adaptors monorepo
-COPY . .
+# Copy tool versions and package files first for better caching
+COPY .tool-versions package.json pnpm-workspace.yaml ./
 
-# Install dependencies and build all adaptors
-RUN pnpm install
+# Install asdf and add plugins (following README instructions)
+RUN bash -l -c "asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git && \
+    asdf plugin add pnpm"
 
-# Build all packages (common, http, sftp)
-RUN pnpm -C packages/common build
-RUN pnpm -C packages/http build
-RUN pnpm -C packages/sftp build
+# Install tool versions as per README
+RUN bash -l -c "asdf install"
 
-# Create output directory structure for all packages
-RUN mkdir -p /output/packages/common && \
-    mkdir -p /output/packages/http && \
-    mkdir -p /output/packages/sftp
+# Copy build script
+COPY build-script.sh ./
 
-# Copy common package
-RUN cp -r packages/common/dist/* /output/packages/common/ && \
-    cp packages/common/package.json /output/packages/common/ && \
-    if [ -f "packages/common/configuration-schema.json" ]; then cp packages/common/configuration-schema.json /output/packages/common/; fi && \
-    if [ -d "packages/common/assets" ]; then cp -r packages/common/assets /output/packages/common/; fi
-
-# Copy http package
-RUN cp -r packages/http/dist/* /output/packages/http/ && \
-    cp packages/http/package.json /output/packages/http/ && \
-    if [ -f "packages/http/configuration-schema.json" ]; then cp packages/http/configuration-schema.json /output/packages/http/; fi && \
-    if [ -d "packages/http/assets" ]; then cp -r packages/http/assets /output/packages/http/; fi
-
-# Copy sftp package
-RUN cp -r packages/sftp/dist/* /output/packages/sftp/ && \
-    cp packages/sftp/package.json /output/packages/sftp/ && \
-    if [ -f "packages/sftp/configuration-schema.json" ]; then cp packages/sftp/configuration-schema.json /output/packages/sftp/; fi && \
-    if [ -d "packages/sftp/assets" ]; then cp -r packages/sftp/assets /output/packages/sftp/; fi
-
-# Default command outputs the build
-CMD ["ls", "-la", "/output/packages/"] 
+# Run the build script with bash
+CMD ["bash", "-l", "build-script.sh"] 
