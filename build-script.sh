@@ -4,18 +4,11 @@ set -e
 # Source asdf to ensure tools are available
 source ~/.asdf/asdf.sh
 
-echo "🏗️  Building OpenFn adaptors with targeted approach..."
+echo "🏗️  Building and deploying OpenFn adaptors using pnpm deploy..."
 
-# Strategy 1: Try to use pnpm deploy for minimal installation
-echo "📦 Attempting targeted build using pnpm deploy..."
-
-# First, try to install only the specific packages we need
-if pnpm --filter '@openfn/language-common' --filter '@openfn/language-sftp' install; then
-    echo "✅ Successfully installed dependencies for target packages only"
-else
-    echo "⚠️  Targeted install failed, falling back to full workspace install..."
-    pnpm install
-fi
+# Install dependencies
+echo "📦 Installing workspace dependencies..."
+pnpm install
 
 # Build the specific packages we need
 echo "🔨 Building @openfn/language-common..."
@@ -24,18 +17,20 @@ pnpm --filter '@openfn/language-common' build
 echo "🔨 Building @openfn/language-sftp..."
 pnpm --filter '@openfn/language-sftp' build
 
-echo "✅ Build completed successfully!"
-echo "📁 Built packages:"
-echo "   - packages/common/dist/"
-echo "   - packages/sftp/dist/"
+# Create a clean "published" adaptors repository structure using pnpm deploy
+echo "📦 Deploying packages using pnpm deploy..."
+rm -rf /workspace/published-adaptors
+mkdir -p /workspace/published-adaptors/packages
 
-# List the built files for verification
-if [ -d "packages/common/dist" ]; then
-    echo "📋 Common package build output:"
-    ls -la packages/common/dist/
-fi
+# Deploy common package (creates self-contained package with all dependencies)
+echo "📦 Deploying common package..."
+pnpm --filter '@openfn/language-common' --prod deploy /workspace/published-adaptors/packages/common
 
-if [ -d "packages/sftp/dist" ]; then
-    echo "📋 SFTP package build output:"
-    ls -la packages/sftp/dist/
-fi 
+# Deploy sftp package (creates self-contained package with all dependencies)  
+echo "📦 Deploying sftp package..."
+pnpm --filter '@openfn/language-sftp' --prod deploy /workspace/published-adaptors/packages/sftp
+
+echo "✅ Build and deploy completed successfully!"
+echo "📁 Published adaptors repository at: /workspace/published-adaptors/"
+echo "   - packages/common/ (self-contained npm-style package with dependencies)"
+echo "   - packages/sftp/ (self-contained npm-style package with dependencies)"

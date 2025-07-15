@@ -123,3 +123,4 @@ dist
 /pnpm-publish-summary.json
 
 .pnpm-store/
+/published-adaptors/
