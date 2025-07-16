@@ -1,278 +1,163 @@
-# OpenFn Adaptors ![Build & Test](https://github.com/openfn/adaptors/actions/workflows/ci.yaml/badge.svg?branch=main) ![Build & Test](https://github.com/openfn/adaptors/actions/workflows/docs.yaml/badge.svg?branch=main)
+# OpenFn Custom Adaptors
 
-Open-source JavaScript/TypeScript modules that provide helper functions to
-communicate with external systems. These adaptors are used by
-[OpenFn Lightning](https://github.com/OpenFn/lightning) and the
-[OpenFn CLI](https://github.com/openfn/cli) for workflow automation.
+This project contains custom adaptors for OpenFn with enhanced functionality, particularly for Excel file processing and SFTP operations.
 
-# Table of Contents
+## Architecture
 
-- [Quick Start](#quick-start)
-  - [Prerequisites](#prerequisites)
-  - [Setup](#setup)
-- [Using Adaptors](#using-adaptors)
-  - [With OpenFn CLI](#with-openfn-cli)
-    - [CLI Prerequisites](#cli-prerequisites)
-    - [Steps](#steps)
-  - [With OpenFn Lightning](#with-openfn-lightning)
-- [Contributing](#contributing)
-- [Build Your Adaptor](#build-your-adaptor)
-  - [Quick Start](#quick-start-1)
-  - [Best Practices](#best-practices)
-  - [Testing Documentation Changes](#testing-documentation-changes)
-- [Changesets](#changesets)
-- [Versioning](#versioning)
-- [Releases](#releases)
-- [Pre-releases](#pre-releases)
-- [Metadata](#metadata)
-- [Useful Resources](#useful-resources)
-  - [Wiki](https://github.com/OpenFn/adaptors/wiki)
-  - [Documentation](https://docs.openfn.org)
-  - [Lightning](https://github.com/OpenFn/lightning)
-  - [CLI](https://github.com/openfn/kit)
+The project is structured as a monorepo with workspace-based dependencies:
 
-## Quick Start
+- **Source packages**: Located in `packages/` directory
+- **Published packages**: Built to `published-adaptors/packages/` directory
+- **Workspace context**: Uses npm workspaces for dependency resolution
 
-### Prerequisites
+## Key Features
 
-- [asdf](https://github.com/asdf-vm/asdf) installed globally
-- `Node.js` and `pnpm` managed via asdf
+### Enhanced SFTP Adaptor
 
-### Setup
+- **getXLSX Function**: Streaming Excel file processing with memory optimization
+- **Chunked Processing**: Handles large files without memory overflow
+- **OpenFn Compliance**: Respects OpenFn's 500MB per-job memory limit
+- **Error Handling**: Comprehensive error handling and logging
 
-```bash
-# Install asdf plugins
-asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
-asdf plugin-add pnpm
+### Memory Optimization
 
-# Install dependencies and build
-asdf install
-pnpm install
-pnpm build
-pnpm run setup
-```
+- Streaming-based processing instead of loading entire files
+- Configurable chunk sizes for batch processing
+- Memory usage monitoring and compliance checking
+- Optimized for large Excel files (1M+ rows)
 
-## Using Adaptors
+## Testing
 
-### With OpenFn CLI
-
-#### CLI Prerequisites
-
-- Install the CLI globally:
-
-  ```bash
-  npm install -g @openfn/cli
-  ```
-
-- Set Repo Directory: Set the environment variable `OPENFN_ADAPTORS_REPO` to the
-  path of the adaptors repo. For example:
-
-```bash
-export OPENFN_ADAPTORS_REPO=~/repo/openfn/adaptors
-```
-
-#### Steps
-
-1. Create a job file (e.g., `job.js`):
-
-   ```javascript
-   // Example: Send data to Salesforce
-   create('Account', {
-     Name: $.data.company_name,
-     Industry: $.data.industry,
-   });
-   ```
-
-2. Create your initial state file in a git ignored folder called `tmp` . This
-   will be used to store the output of your job. The file should be called
-   `state.json` and should look like this:
-
-   ```json
-   {
-     "configuration": { //Your salesforce credentials},
-     "data": {
-       "company_name": "Example Inc.",
-       "industry": "Software"
-     }
-   }
-   ```
-
-3. Run the job:
-
-   Using `-m` and `-a` flags:
-
-   ```bash
-   openfn job.js -ma salesforce -s tmp/state.json -o tmp/output.json
-   ```
-
-   - `-o` will add the output to the output file.
-   - `-m` will run the job from the `adaptors monorepo`
-   - `-a` this will specify the adaptor to run your job with
-
-   You can also run the job using only the `-a` flag:
-
-   ```bash
-   openfn -a salesforce job.js -s tmp/state.json -o tmp/output.json
-   ```
-
-   This will auto install the `salesforce` adaptor and run the job.
-
-   > Run: `openfn help` to see all available options.
-
-### With OpenFn Lightning
-
-Lightning is our open-source workflow automation platform that uses these
-adaptors. See the
-[Lightning documentation](https://github.com/OpenFn/lightning/blob/main/RUNNINGLOCAL.md#using-local-adaptors)
-for setup and usage instructions.
-
-## Contributing
-
-1. **I want to contribute**: Choose your path:
-
-   - To fix an existing issue: Browse
-     [open issues](https://github.com/OpenFn/adaptors/issues)
-   - To build a new adaptor: See [Build your adaptor](#build-your-adaptor)
-   - To fix something specific:
-     [Create an issue to track your changes](https://github.com/OpenFn/adaptors/issues/new)
-
-2. **Submit PR**: Create a draft PR, fill out the template, self-review, then
-   mark as ready for review and assign @mtuchi or @josephjclark.
-
-## Build Your Adaptor
-
-We have a comprehensive
-[developer guide](https://github.com/OpenFn/adaptors/wiki/Build-a-new-Adaptor)
-to help you build your own adaptor.
+The testing approach builds the full project in workspace context to ensure proper dependency resolution.
 
 ### Quick Start
 
-1. Generate and run the new adaptor:
-
-   ```bash
-   pnpm generate <adaptor-name>
-   cd packages/<adaptor-name>
-   pnpm install
-   pnpm build --watch
-   ```
-
-2. Add your logo images to `packages/<adaptor-name>/assets/`:
-
-   - `rectangle.png` (512x190px)
-   - `square.png` (256x256px)
-
-3. [Implement your adaptor](https://github.com/OpenFn/adaptors/wiki/Adaptor-Writing-Best-Practice-&-Common-Patterns)
-   in `packages/<adaptor-name>/src/Adaptor.js`
-
-4. Test your adaptor:
-   [See unit test guideline](https://github.com/OpenFn/adaptors/wiki/Unit-Testing-Guide)
-
-   ```bash
-   pnpm test
-   ```
-
-5. Create a test job in `tmp/job.js` and initial state in `tmp/state.json` then
-   run:
-
-   ```bash
-   openfn tmp/job.js -ma <adaptor-name> -s tmp/state.json -o tmp/output.json
-   ```
-
-### Best Practices
-
-- Update the adaptor's README
-- Include comprehensive [JSDoc](https://jsdoc.app/) comments for all functions
-- [Write unit tests for your adaptor functions](https://github.com/OpenFn/adaptors/wiki/Unit-Testing-Guide)
-- [Follow the existing code style and patterns](https://github.com/OpenFn/adaptors/wiki/Adaptor-Writing-Best-Practice-&-Common-Patterns)
-
-### Testing Documentation Changes
-
-The JSDoc comments in your adaptor code will be automatically converted to HTML
-and uploaded to [docs.openfn.org](https://docs.openfn.org). To test your
-documentation changes locally, you'll need to clone the
-[OpenFn/docs](https://github.com/OpenFn/docs) repository and run the docs site
-locally.
-
-For detailed instructions on testing documentation changes locally, please refer
-to our
-[Testing Documentation Guide](https://github.com/OpenFn/adaptors/wiki/How-to-test-docs-changes)
-in the wiki.
-
-## Changesets
-
-Any submitted PRs should have an accompanying
-[changeset](https://github.com/changesets/changesets).
-
-- Create a new changeset with `pnpm changeset`. This will prompt you for the
-  changes:
-
 ```bash
-pnpm changeset
+# Run all tests
+./test-excel-chunks.sh
+
+# Run specific test types
+./test-excel-chunks.sh build    # Build and verify
+./test-excel-chunks.sh unit     # Unit tests only
+./test-excel-chunks.sh xlsx     # Excel processing tests
+./test-excel-chunks.sh quick    # Quick validation
+./test-excel-chunks.sh shell    # Interactive shell
 ```
 
-> Follow the prompts to describe your changes. This will create a new changeset
-> file in the `.changesets` folder.
+### Test Architecture
 
-- Commit the changeset to the repo when you're ready.
+The testing system uses Docker to create a consistent environment:
 
-## Versioning
+1. **Full Project Build**: Builds the entire monorepo in workspace context
+2. **Dependency Resolution**: Properly resolves `workspace:*` dependencies
+3. **Published Package Testing**: Tests the built packages in their proper context
+4. **Memory Testing**: Validates memory usage and compliance
 
-> If you're PR is approved, you can bump the version and add release dates.
+### Test Types
 
-- Run `pnpm run version` to bump the version and add release dates.
-- Commit your changes. And push to your PR branch.
+- **build**: Verifies the build process and output structure
+- **unit**: Runs unit tests for individual functions
+- **xlsx**: Tests Excel processing functionality specifically
+- **quick**: Fast validation of build output and basic functionality
+- **shell**: Interactive shell for debugging and exploration
 
-## Releases
+## Why This Approach Works
 
-Releases are automated via GitHub Actions when merging to `main`.
+### The Problem with Testing Published Packages
 
-Github Actions will:
+The published packages contain `workspace:*` dependencies that can only be resolved in the original workspace context. Testing them in isolation fails because:
 
-- Build and test (just in case)
-- Publish any new version numbers to npm
-- Generate and push tags for all new versions
-- Send a notification to slack
-- Update `docs/docs.json` with new markdown and update docs.openfn.org
+- No workspace resolver available
+- Dependencies can't be resolved to actual packages
+- They're designed for OpenFn's runtime, not standalone Node.js
 
-## Pre-releases
+### The Solution: Full Project Build
 
-**NOTE: pre-release automation is currently DISABLED until support is activated
-in Lightning**
+By building the entire project in Docker:
 
-Pre-release builds for adaptors are available with the `@next` tag. These can be
-used in the CLI and Lightning and are generally available on `npm` (but because
-they're not flagged as `latest`, they won't be downloaded by default).
+1. **Workspace Context**: Maintains the monorepo workspace structure
+2. **Dependency Resolution**: `workspace:*` dependencies are properly resolved
+3. **Build Process**: Follows the same process as production builds
+4. **Consistent Environment**: Same environment as the actual build system
 
-Old pre-release versions will be deprecated when a new tag is published.
+### Benefits
 
-Pre-releases are available for any non-draft PR with at least one changeset.
+- **Accurate Testing**: Tests the actual build output, not isolated packages
+- **Proper Dependencies**: All dependencies are resolved correctly
+- **Memory Testing**: Can test memory usage in realistic conditions
+- **CI/CD Ready**: Reproducible in any environment
 
-The pre-release build will be updated when:
+## Development Workflow
 
-- A PR is opened in a non-draft state
-- A new commit is pushed
-- A changeset is added
+1. **Make Changes**: Edit source code in `packages/` directory
+2. **Build**: Run `npm run build` to create published packages
+3. **Test**: Use `./test-excel-chunks.sh` to test in proper context
+4. **Deploy**: Published packages work correctly in OpenFn environment
 
-Pre-releases will be given the correct next version number (the number that
-`pnpm changeset version` will generated), plus the suffix `-next-<sha>`, where
-`sha` is the short GitHub SHA for the commit.
+## Key Differences from Previous Approach
 
-Note that the Worker and CLI will both always download the latest versions of
-the adaptor with the `@next` tag - it's a rolling tag and should always be up to
-date.
+### Before: In-Place Testing
+- Built packages within the source tree
+- Tested in the same workspace context
+- Simple but mixed source and build artifacts
 
-## Metadata
+### Now: Workspace-Aware Testing
+- Builds entire project in clean environment
+- Tests published packages in proper context
+- Separates source and build artifacts
+- More accurate representation of production
 
-Check the Wiki for the metadata creation guide:
-[https://github.com/OpenFn/adaptors/wiki/Magic-Metadata](https://github.com/OpenFn/adaptors/wiki/Magic-Metadata)
+## Memory Compliance
 
-## Useful Resources
+The adaptors are designed to comply with OpenFn's memory limits:
 
-- **Wiki**: [OpenFn Adaptors Wiki](https://github.com/OpenFn/adaptors/wiki) -
-  Detailed guides and best practices
-- **Documentation**: [docs.openfn.org](https://docs.openfn.org) - Official
-  documentation
-- **Lightning**: [OpenFn Lightning](https://github.com/OpenFn/lightning) -
-  Workflow automation platform
-- **CLI**: [OpenFn CLI](https://github.com/openfn/kit) - For running and
-  deploying OpenFn jobs.
+- **Memory Limit**: 400MB (80% of 500MB OpenFn limit)
+- **Chunk Size**: 1000 rows per chunk
+- **Monitoring**: Real-time memory usage monitoring
+- **Error Handling**: Graceful handling of memory limit violations
+
+## Docker Environment
+
+The Docker setup:
+- Uses Node.js 18 (matches OpenFn environment)
+- Builds full project with proper workspace context
+- Runs tests in consistent environment
+- Provides interactive shell for debugging
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Docker Build Failures**: Ensure you're running from the correct directory
+2. **Memory Errors**: Check that chunk sizes are appropriate for your data
+3. **Import Errors**: Verify that the build process completed successfully
+
+### Debug Mode
+
+Use the shell test type for interactive debugging:
+
+```bash
+./test-excel-chunks.sh shell
+```
+
+This provides an interactive shell within the Docker container where you can:
+- Explore the built packages
+- Run individual tests
+- Debug import issues
+- Check memory usage
+
+## Contributing
+
+1. Make changes to source packages in `packages/`
+2. Test changes using the Docker-based test suite
+3. Ensure memory compliance and proper error handling
+4. Update documentation as needed
+
+## Integration with OpenFn
+
+The published packages are designed to work seamlessly with OpenFn:
+
+- **Runtime Compatibility**: Built for OpenFn's Node.js runtime
+- **Memory Compliance**: Respects OpenFn's memory limits
+- **Error Handling**: Provides OpenFn-compatible error reporting
+- **Dependency Resolution**: Uses OpenFn's dependency resolution system

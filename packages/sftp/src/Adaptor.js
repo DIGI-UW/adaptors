@@ -172,7 +172,7 @@ export function connect(state) {
 
   const connectConfig = {
     ...cleanedConfig,
-    readyTimeout: 10000, // 10 second timeout
+    readyTimeout: 100000, // 10 second timeout
     retries: 1
   };
 
@@ -737,7 +737,7 @@ export function getXLSX(filePath, parsingOptions = {}) {
     sheetName: null,
     withHeader: true,
     ignoreEmpty: true,
-    chunkSize: 1000,
+    chunkSize: 10000,
     maxRows: undefined,
   };
   const options = { ...defaultOptions, ...parsingOptions };
@@ -762,6 +762,7 @@ export function getXLSX(filePath, parsingOptions = {}) {
     }
     
     console.log('📄 SFTP: Downloading Excel file:', filePath);
+    console.log('🔧 SFTP: Processing options:', options);
     
     const startTime = Date.now();
     
@@ -771,12 +772,35 @@ export function getXLSX(filePath, parsingOptions = {}) {
         const duration = Date.now() - startTime;
         console.log('✅ SFTP: Excel file download completed in', `${duration}ms`);
         console.log('📊 SFTP: Total file size:', buffer.length, 'bytes');
+        
+        // Validate buffer
+        if (!buffer || buffer.length === 0) {
+          throw new Error('Downloaded file is empty or invalid');
+        }
+        
+        // Check if it's actually an Excel file by looking at file signature
+        const fileSignature = buffer.slice(0, 4).toString('hex');
+        console.log('🔍 SFTP: File signature:', fileSignature);
+        
+        // Excel files should start with PK (ZIP signature) as they are ZIP archives
+        if (!fileSignature.startsWith('504b')) {
+          console.warn('⚠️  SFTP: File may not be a valid Excel file (unexpected signature)');
+        }
+        
         console.log('🔧 SFTP: Processing Excel data with streaming...');
         
         return processExcelDataWithStreaming(buffer, filePath, options);
       })
       .then(result => {
         console.log('✅ SFTP: Excel processing completed successfully');
+        console.log('📊 SFTP: Processed rows:', result.totalRows);
+        console.log('📊 SFTP: Data length:', result.data ? result.data.length : 0);
+        
+        // Validate result
+        if (!result.data || result.data.length === 0) {
+          console.warn('⚠️  SFTP: No data extracted from Excel file');
+          console.warn('⚠️  SFTP: This might indicate an empty file or parsing error');
+        }
         
         return {
           ...state,
@@ -794,6 +818,7 @@ export function getXLSX(filePath, parsingOptions = {}) {
         console.error('❌ SFTP: File path:', filePath);
         console.error('❌ SFTP: Error details:', error.message);
         console.error('❌ SFTP: Error code:', error.code || 'UNKNOWN');
+        console.error('❌ SFTP: Error stack:', error.stack);
         
         // Provide helpful error context
         if (error.code === 'ENOENT' || error.message.includes('No such file')) {
@@ -802,6 +827,8 @@ export function getXLSX(filePath, parsingOptions = {}) {
           console.error('💡 SFTP: Permission denied - check file permissions');
         } else if (error.message.includes('not connected')) {
           console.error('💡 SFTP: Connection lost - try reconnecting');
+        } else if (error.message.includes('xlstream') || error.message.includes('stream')) {
+          console.error('💡 SFTP: Excel parsing error - check file format and content');
         }
         
         const enhancedError = new Error(`SFTP Excel file download failed for '${filePath}': ${error.message}`);
@@ -820,20 +847,44 @@ export function getXLSX(filePath, parsingOptions = {}) {
  */
 async function processExcelDataWithStreaming(buffer, filePath, options) {
   console.log('🔧 SFTP: Starting processExcelDataWithStreaming...');
+  console.log('🔧 SFTP: Buffer size:', buffer.length, 'bytes');
+  console.log('🔧 SFTP: Processing options:', options);
   
   // Import modules using dynamic imports for ES module compatibility
-  console.log('🔧 SFTP: Importing modules...');
-  const xlstreamModule = await import('xlstream');
-  console.log('✅ SFTP: xlstream module imported:', Object.keys(xlstreamModule));
+  console.log('🔧 SFTP: Importing required modules...');
+  
+  let xlstreamModule;
+  let writeFileSync, unlinkSync, join, tmpdir;
+  
+  try {
+    xlstreamModule = await import('xlstream');
+    console.log('✅ SFTP: xlstream module imported successfully');
+    console.log('🔧 SFTP: xlstream exports:', Object.keys(xlstreamModule));
+    
+    const fsModule = await import('fs');
+    const pathModule = await import('path');
+    const osModule = await import('os');
+    
+    writeFileSync = fsModule.writeFileSync;
+    unlinkSync = fsModule.unlinkSync;
+    join = pathModule.join;
+    tmpdir = osModule.tmpdir;
+    
+    console.log('✅ SFTP: All required modules imported successfully');
+  } catch (importError) {
+    console.error('❌ SFTP: Failed to import required modules:', importError.message);
+    throw new Error(`Module import failed: ${importError.message}`);
+  }
   
   const { getXlsxStream } = xlstreamModule;
-  console.log('🔧 SFTP: getXlsxStream function type:', typeof getXlsxStream);
   
-  const { writeFileSync, unlinkSync } = await import('fs');
-  const { join } = await import('path');
-  const { tmpdir } = await import('os');
+  if (!getXlsxStream || typeof getXlsxStream !== 'function') {
+    console.error('❌ SFTP: getXlsxStream is not available or not a function');
+    console.error('❌ SFTP: Available xlstream exports:', Object.keys(xlstreamModule));
+    throw new Error('getXlsxStream function is not available from xlstream module');
+  }
   
-  console.log('✅ SFTP: All modules imported successfully');
+  console.log('✅ SFTP: getXlsxStream function is available');
   
   // Create a temporary file to work with xlstream
   const tempDir = tmpdir();
@@ -842,94 +893,70 @@ async function processExcelDataWithStreaming(buffer, filePath, options) {
   
   console.log('🔧 SFTP: Creating temporary file:', tempFilePath);
   
+  let tempFileCreated = false;
+  
   try {
     // Write buffer to temporary file
     writeFileSync(tempFilePath, buffer);
+    tempFileCreated = true;
     console.log('✅ SFTP: Temporary file created successfully');
+    console.log('🔧 SFTP: Temporary file size:', buffer.length, 'bytes');
     
     return new Promise(async (resolve, reject) => {
       try {
-        console.log('🔧 SFTP: Calling getXlsxStream with options:', {
+        const streamOptions = {
           filePath: tempFilePath,
           sheet: options.sheetName || 0,
           withHeader: options.withHeader,
           ignoreEmpty: options.ignoreEmpty,
-        });
+        };
+        
+        console.log('🔧 SFTP: Calling getXlsxStream with options:', streamOptions);
         
         // Get the stream using the correct xlstream API
-        console.log('🔧 SFTP: Calling getXlsxStream...');
-        const stream = await getXlsxStream({
-          filePath: tempFilePath,
-          sheet: options.sheetName || 0,
-          withHeader: options.withHeader,
-          ignoreEmpty: options.ignoreEmpty,
-        });
+        const stream = await getXlsxStream(streamOptions);
         
-        console.log('✅ SFTP: Stream created successfully, type:', typeof stream);
-        console.log('🔧 SFTP: Stream methods available:', Object.getOwnPropertyNames(stream));
-        console.log('🔧 SFTP: Stream prototype:', Object.getPrototypeOf(stream));
+        console.log('✅ SFTP: Stream created successfully');
+        console.log('🔧 SFTP: Stream type:', typeof stream);
+        console.log('🔧 SFTP: Stream is null?', stream === null);
+        console.log('🔧 SFTP: Stream is undefined?', stream === undefined);
+        
+        if (stream) {
+          console.log('🔧 SFTP: Stream methods:', Object.getOwnPropertyNames(stream));
+          console.log('🔧 SFTP: Stream constructor:', stream.constructor.name);
+        }
         
         // Verify stream has required methods
         if (!stream || typeof stream.on !== 'function') {
           console.error('❌ SFTP: Invalid stream object returned from getXlsxStream');
           console.error('❌ SFTP: Stream type:', typeof stream);
           console.error('❌ SFTP: Stream value:', stream);
-          console.error('❌ SFTP: Stream methods:', Object.getOwnPropertyNames(stream || {}));
           
-          // Try alternative approach - maybe it's not a stream but a promise or different object
+          // Try alternative approach - maybe it's a promise
           if (stream && typeof stream.then === 'function') {
             console.log('🔧 SFTP: Stream appears to be a Promise, awaiting it...');
-            const resolvedStream = await stream;
-            console.log('✅ SFTP: Resolved stream type:', typeof resolvedStream);
-            if (typeof resolvedStream.on === 'function') {
-              console.log('✅ SFTP: Resolved stream is valid, proceeding...');
-              return processStream(resolvedStream);
+            try {
+              const resolvedStream = await stream;
+              console.log('✅ SFTP: Resolved stream type:', typeof resolvedStream);
+              
+              if (resolvedStream && typeof resolvedStream.on === 'function') {
+                console.log('✅ SFTP: Resolved stream is valid, using it...');
+                return processStreamData(resolvedStream, options, resolve, reject);
+              }
+            } catch (resolveError) {
+              console.error('❌ SFTP: Failed to resolve stream promise:', resolveError.message);
             }
           }
           
-          throw new Error(`Invalid stream object returned from getXlsxStream. Type: ${typeof stream}, Methods: ${Object.getOwnPropertyNames(stream || {}).join(', ')}`);
-        }
-        
-        // Process the stream
-        let allData = [];
-        let chunk = [];
-        let processedRows = 0;
-        let chunksProcessed = 0;
-        let finished = false;
-        const maxRows = options.maxRows;
-
-        stream.on('data', row => {
-          if (finished) return;
-          chunk.push(row.formatted);
-          processedRows++;
-          if (chunk.length === options.chunkSize) {
-            allData = allData.concat(chunk);
-            chunk = [];
-            chunksProcessed++;
-          }
-          if (maxRows && processedRows >= maxRows) {
-            if (chunk.length > 0) {
-              allData = allData.concat(chunk);
-              chunk = [];
-              chunksProcessed++;
-            }
-            finished = true;
-            stream.destroy();
-          }
-        });
-        
-        stream.on('end', () => {
-          if (!finished && chunk.length > 0) {
-            allData = allData.concat(chunk);
-            chunksProcessed++;
-          }
-          resolve({
+          // Return empty result if stream is invalid
+          console.warn('⚠️  SFTP: Returning empty result due to invalid stream');
+          return resolve({
             fileName: filePath,
             fileSize: buffer.length,
             chunkSize: options.chunkSize,
-            chunksProcessed,
-            totalRows: processedRows,
-            data: allData,
+            chunksProcessed: 0,
+            totalRows: 0,
+            data: [],
             metadata: {
               processedAt: new Date().toISOString(),
               processingMethod: 'xlstream',
@@ -937,30 +964,184 @@ async function processExcelDataWithStreaming(buffer, filePath, options) {
               ignoreEmpty: options.ignoreEmpty,
               actualChunkSize: options.chunkSize,
               maxRows: options.maxRows,
+              error: 'Invalid stream object',
             },
           });
-        });
+        }
         
-        stream.on('error', err => {
-          console.error('❌ SFTP: Stream error:', err);
-          reject(err);
-        });
+        // Process the stream
+        processStreamData(stream, options, resolve, reject, buffer, filePath);
         
       } catch (error) {
-        console.error('❌ SFTP: Error in stream processing:', error);
+        console.error('❌ SFTP: Error in stream processing:', error.message);
+        console.error('❌ SFTP: Error stack:', error.stack);
         reject(error);
       }
     });
     
+  } catch (error) {
+    console.error('❌ SFTP: Error in processExcelDataWithStreaming:', error.message);
+    console.error('❌ SFTP: Error stack:', error.stack);
+    throw error;
   } finally {
     // Clean up temporary file
-    try {
-      unlinkSync(tempFilePath);
-      console.log('✅ SFTP: Temporary file cleaned up successfully');
-    } catch (cleanupError) {
-      console.warn('⚠️  SFTP: Could not clean up temporary file:', cleanupError.message);
+    if (tempFileCreated) {
+      try {
+        unlinkSync(tempFilePath);
+        console.log('✅ SFTP: Temporary file cleaned up successfully');
+      } catch (cleanupError) {
+        console.warn('⚠️  SFTP: Could not clean up temporary file:', cleanupError.message);
+      }
     }
   }
+}
+
+/**
+ * Process stream data and handle events
+ * @private
+ */
+function processStreamData(stream, options, resolve, reject, buffer, filePath) {
+  console.log('🔧 SFTP: Starting stream data processing...');
+  
+  let allData = [];
+  let chunk = [];
+  let processedRows = 0;
+  let chunksProcessed = 0;
+  let finished = false;
+  const maxRows = options.maxRows;
+  
+
+  console.log(`chunk size: ${options.chunkSize}`)
+
+  // Set up timeout to prevent hanging
+  const timeout = setTimeout(() => {
+    if (!finished) {
+      console.warn('⚠️  SFTP: Stream processing timeout (30 seconds)');
+      finished = true;
+      stream.destroy();
+      resolve({
+        fileName: filePath,
+        fileSize: buffer ? buffer.length : 0,
+        chunkSize: options.chunkSize,
+        chunksProcessed,
+        totalRows: processedRows,
+        data: allData,
+        metadata: {
+          processedAt: new Date().toISOString(),
+          processingMethod: 'xlstream',
+          withHeader: options.withHeader,
+          ignoreEmpty: options.ignoreEmpty,
+          actualChunkSize: options.chunkSize,
+          maxRows: options.maxRows,
+          timeout: true,
+        },
+      });
+    }
+  }, 300000); // 30 second timeout
+  
+  stream.on('data', row => {
+    if (finished) return;
+    
+    // Log every 1000 rows
+    if (processedRows % 10000 === 0) {
+      console.log('📊 SFTP: Processing row:', processedRows + 1);
+    }
+    
+    // Log the first 3 rows
+    // Log e
+    if (processedRows < 3) {
+      console.log('📊 SFTP: Sample row data:', row);
+    }
+    
+    chunk.push(row.formatted || row);
+    processedRows++;
+    
+    if (chunk.length >= options.chunkSize) {
+      allData = allData.concat(chunk);
+      chunk = [];
+      chunksProcessed++;
+      console.log('📦 SFTP: Completed chunk', chunksProcessed, 'with', options.chunkSize, 'rows');
+    }
+    
+    if (maxRows && processedRows >= maxRows) {
+      console.log('🔢 SFTP: Reached max rows limit:', maxRows);
+      if (chunk.length > 0) {
+        allData = allData.concat(chunk);
+        chunk = [];
+        chunksProcessed++;
+      }
+      finished = true;
+      stream.destroy();
+    }
+  });
+  
+  stream.on('end', () => {
+    console.log('✅ SFTP: Stream ended successfully');
+    clearTimeout(timeout);
+    
+    if (!finished && chunk.length > 0) {
+      allData = allData.concat(chunk);
+      chunksProcessed++;
+      console.log('📦 SFTP: Final chunk processed with', chunk.length, 'rows');
+    }
+    
+    console.log('📊 SFTP: Processing complete:');
+    console.log('   - Total rows:', processedRows);
+    console.log('   - Chunks processed:', chunksProcessed);
+    console.log('   - Data length:', allData.length);
+    
+    resolve({
+      fileName: filePath,
+      fileSize: buffer ? buffer.length : 0,
+      chunkSize: options.chunkSize,
+      chunksProcessed,
+      totalRows: processedRows,
+      data: allData,
+      metadata: {
+        processedAt: new Date().toISOString(),
+        processingMethod: 'xlstream',
+        withHeader: options.withHeader,
+        ignoreEmpty: options.ignoreEmpty,
+        actualChunkSize: options.chunkSize,
+        maxRows: options.maxRows,
+      },
+    });
+  });
+  
+  stream.on('error', err => {
+    console.error('❌ SFTP: Stream error:', err.message);
+    console.error('❌ SFTP: Stream error stack:', err.stack);
+    clearTimeout(timeout);
+    
+    // Don't reject completely, return partial data if available
+    if (processedRows > 0) {
+      console.log('⚠️  SFTP: Returning partial data due to stream error');
+      if (chunk.length > 0) {
+        allData = allData.concat(chunk);
+        chunksProcessed++;
+      }
+      
+      resolve({
+        fileName: filePath,
+        fileSize: buffer ? buffer.length : 0,
+        chunkSize: options.chunkSize,
+        chunksProcessed,
+        totalRows: processedRows,
+        data: allData,
+        metadata: {
+          processedAt: new Date().toISOString(),
+          processingMethod: 'xlstream',
+          withHeader: options.withHeader,
+          ignoreEmpty: options.ignoreEmpty,
+          actualChunkSize: options.chunkSize,
+          maxRows: options.maxRows,
+          error: err.message,
+        },
+      });
+    } else {
+      reject(err);
+    }
+  });
 }
 
 
