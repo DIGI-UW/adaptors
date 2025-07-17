@@ -648,6 +648,180 @@ function callNewTracker(
   });
 }
 
+/**
+ * Read a specific chunk from an Excel file via SFTP
+ * @public
+ * @example
+ * getExcelChunk('/data/file.xlsx', 0, 5000)(state)
+ * @function
+ * @param {string} filePath - Path to the Excel file on the SFTP server
+ * @param {number} chunkIndex - Zero-based index of the chunk to read (0 = first chunk)
+ * @param {number} chunkSize - Number of rows per chunk (default: 5000)
+ * @param {object} options - Additional parsing options
+ * @returns {Operation}
+ */
+export function getExcelChunk(filePath, chunkIndex = 0, chunkSize = 5000, options = {}) {
+  const defaultOptions = {
+    sheetName: null,
+    withHeader: true,
+    ignoreEmpty: true,
+  };
+  const processOptions = { ...defaultOptions, ...options };
+
+  return state => {
+    console.log(`📄 DHIS2: Reading Excel chunk ${chunkIndex + 1} from ${filePath}`);
+    console.log(`📊 DHIS2: Chunk size: ${chunkSize}, Options:`, processOptions);
+    
+    // Import modules dynamically for ES module compatibility
+    return Promise.all([
+      import('ssh2-sftp-client'),
+      import('xlstream'),
+      import('fs'),
+      import('path'),
+      import('os')
+    ]).then(([sftpModule, xlstreamModule, fsModule, pathModule, osModule]) => {
+      const SftpClient = sftpModule.default;
+      const { getXlsxStream } = xlstreamModule;
+      const { writeFileSync, unlinkSync } = fsModule;
+      const { join } = pathModule;
+      const { tmpdir } = osModule;
+      
+      // Extract SFTP configuration from state
+      const { configuration } = state;
+      if (!configuration || !configuration.host) {
+        throw new Error('DHIS2 getExcelChunk: SFTP configuration missing from state. Expected: { configuration: { host, username, password, ... } }');
+      }
+      
+      console.log(`📡 DHIS2: Connecting to SFTP server: ${configuration.host}`);
+      
+      const sftp = new SftpClient();
+      const startTime = Date.now();
+      
+      return sftp.connect(configuration)
+        .then(() => {
+          console.log('✅ DHIS2: SFTP connection established');
+          return sftp.get(filePath);
+        })
+        .then(buffer => {
+          const downloadDuration = Date.now() - startTime;
+          console.log(`✅ DHIS2: Excel file downloaded in ${downloadDuration}ms (${buffer.length} bytes)`);
+          
+          // Create temporary file for xlstream processing
+          const tempDir = tmpdir();
+          const tempFileName = `dhis2-excel-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.xlsx`;
+          const tempFilePath = join(tempDir, tempFileName);
+          
+          writeFileSync(tempFilePath, buffer);
+          console.log(`🔧 DHIS2: Created temporary file: ${tempFileName}`);
+          
+          // Calculate chunk boundaries
+          const skipRows = chunkIndex * chunkSize;
+          const maxRows = chunkSize;
+          
+          console.log(`📊 DHIS2: Reading rows ${skipRows + 1} to ${skipRows + maxRows}`);
+          
+          const streamOptions = {
+            filePath: tempFilePath,
+            sheet: processOptions.sheetName || 0,
+            withHeader: processOptions.withHeader,
+            ignoreEmpty: processOptions.ignoreEmpty,
+          };
+          
+          return getXlsxStream(streamOptions)
+            .then(stream => {
+              return new Promise((resolve, reject) => {
+                let rowIndex = 0;
+                let chunkData = [];
+                let headers = null;
+                
+                stream.on('data', row => {
+                  // Handle header row
+                  if (processOptions.withHeader && rowIndex === 0) {
+                    headers = Object.keys(row.formatted || row);
+                    console.log(`📋 DHIS2: Excel headers:`, headers);
+                  }
+                  
+                  // Skip rows before our chunk
+                  if (rowIndex < skipRows) {
+                    rowIndex++;
+                    return;
+                  }
+                  
+                  // Stop if we've collected enough rows for this chunk
+                  if (chunkData.length >= maxRows) {
+                    stream.destroy();
+                    return;
+                  }
+                  
+                  // Add row to chunk
+                  chunkData.push(row.formatted || row);
+                  rowIndex++;
+                  
+                  // Log progress for large chunks
+                  if (chunkData.length % 1000 === 0) {
+                    console.log(`📊 DHIS2: Collected ${chunkData.length}/${maxRows} rows for chunk`);
+                  }
+                });
+                
+                stream.on('end', () => {
+                  console.log(`✅ DHIS2: Chunk collection complete: ${chunkData.length} rows`);
+                  resolve({ chunkData, headers, rowIndex });
+                });
+                
+                stream.on('error', err => {
+                  console.error('❌ DHIS2: Excel streaming error:', err.message);
+                  reject(err);
+                });
+                
+                // Timeout protection
+                setTimeout(() => {
+                  console.warn('⚠️  DHIS2: Excel processing timeout (60 seconds)');
+                  stream.destroy();
+                  resolve({ chunkData, headers, rowIndex });
+                }, 60000);
+              });
+            })
+            .finally(() => {
+              // Clean up temporary file
+              try {
+                unlinkSync(tempFilePath);
+                console.log('🗑️  DHIS2: Cleaned up temporary file');
+              } catch (error) {
+                console.warn('⚠️  DHIS2: Could not delete temporary file:', error.message);
+              }
+            });
+        })
+        .then(({ chunkData, headers, rowIndex }) => {
+          const totalDuration = Date.now() - startTime;
+          console.log(`🎉 DHIS2: Excel chunk processing completed in ${totalDuration}ms`);
+          
+          return {
+            ...state,
+            chunkData,
+            chunkMetadata: {
+              chunkIndex,
+              chunkSize,
+              rowsInChunk: chunkData.length,
+              totalRowsProcessed: rowIndex,
+              headers,
+              filePath,
+              processedAt: new Date().toISOString(),
+            }
+          };
+        })
+        .finally(() => {
+          // Ensure SFTP connection is closed
+          return sftp.end().catch(err => {
+            console.warn('⚠️  DHIS2: Error closing SFTP connection:', err.message);
+          });
+        });
+    }).catch(error => {
+      console.error('❌ DHIS2: getExcelChunk failed:', error.message);
+      throw new Error(`Excel chunk reading failed: ${error.message}`);
+    });
+  };
+}
+
 export {
   alterState,
   as,

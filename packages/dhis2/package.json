@@ -38,7 +38,9 @@
     "@openfn/language-common": "workspace:*",
     "axios": "^1.8.2",
     "lodash": "^4.17.21",
-    "qs": "^6.11.0"
+    "qs": "^6.11.0",
+    "ssh2-sftp-client": "9.0.4",
+    "xlstream": "^2.5.5"
   },
   "devDependencies": {
     "assertion-error": "2.0.0",
