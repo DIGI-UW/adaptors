@@ -514,7 +514,8 @@
       "name": "getExcelMetadata",
       "params": [
         "filePath",
-        "chunkSize"
+        "chunkSize",
+        "options"
       ],
       "docs": {
         "description": "Get metadata about an Excel file for chunk processing",
@@ -527,6 +528,10 @@
           {
             "title": "example",
             "description": "getExcelMetadata('/path/to/file.xlsx', 5000)"
+          },
+          {
+            "title": "example",
+            "description": "getExcelMetadata('/path/to/file.xlsx', 5000, {\n  columnMapping: {\n    regions: ['Region', 'region'],\n    zones: ['Zone', 'zone'],\n    districts: ['District', 'district'],\n    sites: ['Site', 'site'],\n    hsectors: ['hsector', 'health_sector'],\n    quarters: ['Quarter', 'quarter'],\n    reportingPeriods: ['Reporting period', 'reporting_period'],\n    indicators: ['Indicator_name', 'indicator_name']\n  }\n})"
           },
           {
             "title": "function",
@@ -550,6 +555,15 @@
               "name": "number"
             },
             "name": "chunkSize"
+          },
+          {
+            "title": "param",
+            "description": "Optional parameters including columnMapping",
+            "type": {
+              "type": "NameExpression",
+              "name": "object"
+            },
+            "name": "options"
           },
           {
             "title": "returns",

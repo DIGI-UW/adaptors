@@ -19,8 +19,12 @@
   "main": "dist/index.cjs",
   "scripts": {
     "build": "pnpm clean && build-adaptor sftp",
-    "test": "mocha --experimental-specifier-resolution=node --no-warnings test/*.js",
-    "test:watch": "mocha -w --experimental-specifier-resolution=node --no-warnings",
+    "build:debug": "pnpm clean && build-adaptor sftp --sourcemap",
+    "test": "NODE_OPTIONS='--loader=testdouble --experimental-specifier-resolution=node --no-warnings' mocha test/*.js",
+    "test:watch": "NODE_OPTIONS='--loader=testdouble --experimental-specifier-resolution=node --no-warnings' mocha -w test/*.js",
+    "test:file": "NODE_OPTIONS='--loader=testdouble --experimental-specifier-resolution=node --no-warnings' mocha test/${FILE}",
+    "test:grep": "NODE_OPTIONS='--loader=testdouble --experimental-specifier-resolution=node --no-warnings' mocha test/*.js --grep \"${GREP}\"",
+    "test:single": "NODE_OPTIONS='--loader=testdouble --experimental-specifier-resolution=node --no-warnings' mocha",
     "clean": "rimraf dist types docs",
     "pack": "pnpm pack --pack-destination ../../dist",
     "lint": "eslint src"

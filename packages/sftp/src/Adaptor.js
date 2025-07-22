@@ -719,12 +719,26 @@ export function getFile(filePath) {
  * @public
  * @example
  * getExcelMetadata('/path/to/file.xlsx', 5000)
+ * @example
+ * getExcelMetadata('/path/to/file.xlsx', 5000, {
+ *   columnMapping: {
+ *     regions: ['Region', 'region'],
+ *     zones: ['Zone', 'zone'],
+ *     districts: ['District', 'district'],
+ *     sites: ['Site', 'site'],
+ *     hsectors: ['hsector', 'health_sector'],
+ *     quarters: ['Quarter', 'quarter'],
+ *     reportingPeriods: ['Reporting period', 'reporting_period'],
+ *     indicators: ['Indicator_name', 'indicator_name']
+ *   }
+ * })
  * @function
  * @param {string} filePath - Path to the Excel file
  * @param {number} chunkSize - Size of each chunk in rows
+ * @param {object} options - Optional parameters including columnMapping
  * @returns {Operation}
  */
-export function getExcelMetadata(filePath, chunkSize) {
+export function getExcelMetadata(filePath, chunkSize, options = {}) {
   return state => {
     console.log('📊 SFTP: Getting Excel metadata...');
     
@@ -752,6 +766,11 @@ export function getExcelMetadata(filePath, chunkSize) {
     console.log('📄 SFTP: Reading Excel metadata for:', filePath);
     console.log('🔧 SFTP: Chunk size:', chunkSize);
     
+    if (options.columnMapping) {
+      console.log('🔧 SFTP: Using column mapping for unique value collection');
+      console.log('🔧 SFTP: Mapping keys:', Object.keys(options.columnMapping));
+    }
+    
     const startTime = Date.now();
     
     return sftp
@@ -761,7 +780,7 @@ export function getExcelMetadata(filePath, chunkSize) {
         console.log('✅ SFTP: Excel file downloaded in', `${duration}ms`);
         console.log('📊 SFTP: File size:', buffer.length, 'bytes');
         
-        return processExcelMetadata(buffer, filePath, chunkSize);
+        return processExcelMetadata(buffer, filePath, chunkSize, options);
       })
       .then(metadata => {
         console.log('✅ SFTP: Excel metadata processing completed');
@@ -887,7 +906,7 @@ export function getExcelChunk(filePath, chunkIndex, chunkSize) {
  * Process Excel file to get metadata without loading data
  * @private
  */
-async function processExcelMetadata(buffer, filePath, chunkSize) {
+async function processExcelMetadata(buffer, filePath, chunkSize, options = {}) {
   console.log('🔧 SFTP: Starting Excel metadata processing...');
   
   // Import modules
@@ -927,6 +946,18 @@ async function processExcelMetadata(buffer, filePath, chunkSize) {
     tempFileCreated = true;
     
     return new Promise(async (resolve, reject) => {
+      // Helper function to clean up temporary file
+      const cleanupTempFile = () => {
+        if (tempFileCreated) {
+          try {
+            unlinkSync(tempFilePath);
+            console.log('✅ SFTP: Temporary metadata file cleaned up');
+          } catch (cleanupError) {
+            console.warn('⚠️  SFTP: Could not clean up temporary metadata file:', cleanupError.message);
+          }
+        }
+      };
+      
       try {
         const streamOptions = {
           filePath: tempFilePath,
@@ -940,32 +971,33 @@ async function processExcelMetadata(buffer, filePath, chunkSize) {
         let totalRows = 0;
         let finished = false;
         
-        // Initialize unique value collectors
-        const uniqueValues = {
-          regions: new Set(),
-          zones: new Set(),
-          districts: new Set(),
-          sites: new Set(),
-          hsectors: new Set(),
-          quarters: new Set(),
-          reportingPeriods: new Set(),
-          indicators: new Set()
-        };
+        // Initialize unique value collectors based on column mapping
+        const uniqueValues = {};
+        if (options.columnMapping) {
+          Object.keys(options.columnMapping).forEach(key => {
+            uniqueValues[key] = new Set();
+          });
+          console.log('🔧 SFTP: Initialized unique value collectors for:', Object.keys(uniqueValues));
+        }
         
         stream.on('data', (row) => {
           if (finished) return;
           totalRows++;
           
-          // Collect unique values from this row
-          const rowData = row.formatted || row;
-          if (rowData.Region) uniqueValues.regions.add(rowData.Region);
-          if (rowData.Zone) uniqueValues.zones.add(rowData.Zone);
-          if (rowData.District) uniqueValues.districts.add(rowData.District);
-          if (rowData.Site) uniqueValues.sites.add(rowData.Site);
-          if (rowData.hsector) uniqueValues.hsectors.add(rowData.hsector);
-          if (rowData.Quarter) uniqueValues.quarters.add(rowData.Quarter);
-          if (rowData['Reporting period']) uniqueValues.reportingPeriods.add(rowData['Reporting period']);
-          if (rowData.Indicator_name) uniqueValues.indicators.add(rowData.Indicator_name);
+          // Collect unique values from this row using column mapping
+          const rowData = (row.raw && row.raw.obj) || (row.formatted && row.formatted.obj) || row;
+          
+          if (options.columnMapping) {
+            Object.entries(options.columnMapping).forEach(([key, possibleColumns]) => {
+              // Try each possible column name for this key
+              for (const columnName of possibleColumns) {
+                if (rowData[columnName] !== undefined && rowData[columnName] !== null && rowData[columnName] !== '') {
+                  uniqueValues[key].add(rowData[columnName]);
+                  break; // Stop at first match
+                }
+              }
+            });
+          }
           
           // Log progress every 10K rows
           if (totalRows % 10000 === 0) {
@@ -978,6 +1010,7 @@ async function processExcelMetadata(buffer, filePath, chunkSize) {
           
           if (!finished) {
             finished = true;
+            cleanupTempFile();
             resolve(createMetadataResult(totalRows, chunkSize, filePath, uniqueValues));
           }
         });
@@ -992,6 +1025,7 @@ async function processExcelMetadata(buffer, filePath, chunkSize) {
           
           if (!finished) {
             finished = true;
+            cleanupTempFile();
             reject(new Error(`Excel metadata processing failed: ${error.message}`));
           }
         });
@@ -1002,29 +1036,30 @@ async function processExcelMetadata(buffer, filePath, chunkSize) {
           if (!finished) {
             console.log('✅ SFTP: Metadata processing completed on stream close');
             finished = true;
+            cleanupTempFile();
             resolve(createMetadataResult(totalRows, chunkSize, filePath, uniqueValues));
           }
         });
         
       } catch (error) {
         console.error('❌ SFTP: Error in metadata processing:', error.message);
+        cleanupTempFile();
         reject(error);
       }
     });
     
   } catch (error) {
     console.error('❌ SFTP: Error in processExcelMetadata:', error.message);
-    throw error;
-  } finally {
-    // Clean up temporary file
+    // Clean up if we created the file but failed before returning the Promise
     if (tempFileCreated) {
       try {
         unlinkSync(tempFilePath);
-        console.log('✅ SFTP: Temporary metadata file cleaned up');
+        console.log('✅ SFTP: Temporary metadata file cleaned up after error');
       } catch (cleanupError) {
         console.warn('⚠️  SFTP: Could not clean up temporary metadata file:', cleanupError.message);
       }
     }
+    throw error;
   }
 }
 
@@ -1226,22 +1261,18 @@ function createMetadataResult(totalRows, chunkSize, filePath, uniqueValues = nul
   
   // Convert unique values Sets to Arrays and log counts
   let uniqueValuesArrays = null;
-  if (uniqueValues) {
-    uniqueValuesArrays = {
-      regions: Array.from(uniqueValues.regions),
-      zones: Array.from(uniqueValues.zones),
-      districts: Array.from(uniqueValues.districts),
-      sites: Array.from(uniqueValues.sites),
-      hsectors: Array.from(uniqueValues.hsectors),
-      quarters: Array.from(uniqueValues.quarters),
-      reportingPeriods: Array.from(uniqueValues.reportingPeriods),
-      indicators: Array.from(uniqueValues.indicators)
-    };
+  if (uniqueValues && Object.keys(uniqueValues).length > 0) {
+    uniqueValuesArrays = {};
+    Object.entries(uniqueValues).forEach(([key, valueSet]) => {
+      uniqueValuesArrays[key] = Array.from(valueSet);
+    });
     
     console.log('📊 SFTP: Unique values discovered:');
     Object.entries(uniqueValuesArrays).forEach(([key, values]) => {
       console.log(`   - ${key}: ${values.length} unique values`);
     });
+  } else {
+    console.log('📊 SFTP: No unique values collected (no column mapping provided)');
   }
   
   const result = {

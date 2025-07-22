@@ -1,0 +1,52 @@
+FROM ubuntu:22.04
+
+# Install required dependencies including Python for node-gyp
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    python3 \
+    python3-dev \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install asdf
+RUN git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.14.0
+
+# Set up asdf environment properly
+ENV PATH="/root/.asdf/bin:/root/.asdf/shims:$PATH"
+ENV ASDF_DIR="/root/.asdf"
+RUN echo 'source ~/.asdf/asdf.sh' >> ~/.bashrc
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy tool versions and package files first for better caching
+COPY .tool-versions package.json pnpm-workspace.yaml ./
+
+# Install asdf and add plugins (following README instructions)
+RUN bash -l -c "asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git && \
+    asdf plugin add pnpm"
+
+# Install tool versions as per README
+RUN bash -l -c "asdf install"
+
+# Copy source code
+COPY . .
+
+# Install dependencies and build
+RUN bash -l -c "source ~/.asdf/asdf.sh && \
+    pnpm install --recursive --frozen-lockfile && \
+    pnpm --filter '@openfn/language-sftp' build && \
+    pnpm run setup"
+
+# Set working directory to sftp package for testing
+WORKDIR /workspace/packages/sftp
+ENV NODE_ENV=test
+ENV NODE_OPTIONS="--experimental-specifier-resolution=node --no-warnings"
+
+# Leave container running for live shell connection
+CMD ["tail", "-f", "/dev/null"]
+
+#RUN bash -l -c "pnpm exec mocha --experimental-specifier-resolution=node --no-warnings test/getExcelMetadata.test.js" 
