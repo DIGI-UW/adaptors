@@ -1363,8 +1363,6 @@ export function normalizeCSVarray(options, callback) {
   };
 }
 
-export * from 'lodash/fp';
-
 export {
   alterState,
   fn,

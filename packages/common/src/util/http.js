@@ -2,6 +2,7 @@ import { MockAgent, Agent } from 'undici';
 import { getReasonPhrase } from 'http-status-codes';
 import { Readable } from 'node:stream';
 import querystring from 'node:querystring';
+import path from 'node:path';
 import throwError from './throw-error';
 import { encode } from './base64';
 

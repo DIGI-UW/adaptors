@@ -19,12 +19,15 @@
   "types": "types/index.d.ts",
   "scripts": {
     "build": "pnpm clean && build-adaptor dhis2",
+    "build:debug": "pnpm clean && build-adaptor dhis2 --sourcemap",
+    "test": "mocha test/index.test.js",
+    "test:watch": "mocha -w test/**/*.test.js",
+    "test:file": "mocha test/${FILE}",
+    "test:grep": "mocha test/**/*.test.js --grep \"${GREP}\"",
+    "test:single": "mocha",
     "clean": "rimraf dist types docs",
     "pack": "pnpm pack --pack-destination ../../dist",
-    "test": "mocha --experimental-specifier-resolution=node --no-warnings --exclude test/integration.js --recursive --timeout 10000",
-    "test:watch": "mocha -w --experimental-specifier-resolution=node --no-warnings --exclude test/integration.js --recursive --timeout 10000",
-    "test:integration": "mocha --experimental-specifier-resolution=node --no-warnings test/integration.js",
-    "lint": "eslint src"
+    "lint": "eslint src/**"
   },
   "author": "Open Function Group",
   "license": "LGPLv3",

@@ -99,36 +99,29 @@ export const CONTENT_TYPES = {
  * @returns {string}
  */
 export function selectId(resourceType) {
-  switch (resourceType) {
-    case 'trackedEntityInstances':
-      return 'trackedEntityInstance';
-
-    // We can extend here if we find other special kinds of resourceType
-    // case 'other-special-case':
-    //   return 'other-special-id';
-
-    default:
-      return 'id';
-  }
+  if (resourceType === 'trackedEntityInstances') return 'trackedEntityInstance';
+  return 'id';
 }
 
 export function handleHttpResponse(result, state) {
-  const { body, ...responseWithoutBody } = result;
-
-  const nextState = {
-    ...composeNextState(state, body),
-    response: responseWithoutBody,
-  };
-  return nextState;
+  if (result.status >= 400) {
+    throw new Error(JSON.stringify(result.data, null, 2));
+  }
+  return result;
 }
 
 export function handleResponse(result, state) {
-  const { body } = result;
+  if (result.status >= 400) {
+    // Always throw an error if the request fails.
+    const message = result.data?.response?.errorReports
+      ? result.data.response.errorReports.map(er => er.message).join('; ')
+            : JSON.stringify(result.data, null, 2);
 
-  const nextState = {
-    ...composeNextState(state, body),
-  };
-  return nextState;
+    console.error('DHIS2 API Error:', message);
+    throw new Error(message);
+  }
+  state.data = result.data;
+  state.response = result;
 }
 
 export function prettyJson(data) {
@@ -204,5 +197,19 @@ export async function request(configuration, requestData) {
     baseUrl: hostUrl,
   };
 
-  return commonRequest(method, path, opts).then(logResponse);
+  try {
+    const result = await commonRequest(method, path, opts);
+    const { headers, status, statusText, body } = result;
+
+    return {
+      headers,
+      status,
+      statusText,
+      data: body,
+    };
+  } catch (error) {
+    console.error(`DHIS2 Request Failed: ${error.message}`);
+    // Re-throw the error to ensure it propagates up to the job.
+    throw error;
+  }
 }

@@ -239,6 +239,24 @@ describe('create', () => {
       message: 'the response',
     });
   });
+
+  it('should pass configuration to the request function correctly', async () => {
+    const operation = create('organisationUnits', { name: 'New Unit' });
+    let error;
+    try {
+      // We execute the inner function directly, not via the `execute` helper.
+      await operation(state);
+    } catch (e) {
+      error = e;
+    }
+
+    // We expect an error because no mock response is configured for this call.
+    expect(error).to.exist;
+    // The specific error from the mock client proves the `request` function was
+    // called correctly. If `configuration` were undefined, we would have gotten
+    // a `ReferenceError` instead.
+    expect(error.message).to.match(/No matching mock handler/);
+  });
 });
 
 describe('update', () => {

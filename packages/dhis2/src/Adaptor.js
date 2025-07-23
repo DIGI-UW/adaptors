@@ -8,7 +8,7 @@ import {
   ensureArray,
   prefixVersionToPath,
   request,
-} from './util';
+} from './util.js';
 
 /**
  * State object
@@ -188,6 +188,7 @@ function configMigrationHelper(state) {
  */
 export function create(path, data, params = {}) {
   return async state => {
+    const { configuration } = state;
     if (path === 'tracker') {
       throw new Error('Invalid resourceType. Use `tracker.import()` instead.');
     }
@@ -211,10 +212,10 @@ export function create(path, data, params = {}) {
         resolvedData
       );
     } else {
-      
+      const path = prefixVersionToPath(configuration, {}, resolvedPath);
       response = await request(configuration, {
         method: 'POST',
-        path: prefixVersionToPath(configuration, {}, resolvedPath),
+        path,
         options: {
           query: resolvedParams,
         },
@@ -225,10 +226,15 @@ export function create(path, data, params = {}) {
 
     const { location } = response.headers;
     if (location) {
-      console.log(`Record available @ ${location}`);
+      console.log(
+        `Record available @ ${
+          response.headers.location || `${state.configuration.hostUrl}/${path}`
+        }${location}`
+      );
     }
 
-    return handleResponse(response, state);
+    handleResponse(response, state);
+    return state;
   };
 }
 

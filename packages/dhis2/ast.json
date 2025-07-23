@@ -571,6 +571,89 @@
         ]
       },
       "valid": true
+    },
+    {
+      "name": "processExcelChunkToDHIS2",
+      "params": [
+        "filePath",
+        "chunkIndex",
+        "chunkSize",
+        "transformFn",
+        "uploadOptions"
+      ],
+      "docs": {
+        "description": "Process an Excel chunk to DHIS2 in one atomic operation",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "processExcelChunkToDHIS2(\n  '/data/excel-files/data.xlsx',\n  0,\n  5000,\n  (chunkData, metadata) => ({\n    dataValues: chunkData.map(row => ({\n      dataElement: row.dataElement,\n      orgUnit: row.orgUnit,\n      period: row.period,\n      value: row.value\n    })),\n    completeDate: new Date().toISOString()\n  })\n);"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": "Path to the Excel file",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "filePath"
+          },
+          {
+            "title": "param",
+            "description": "Index of the chunk to process (0-based)",
+            "type": {
+              "type": "NameExpression",
+              "name": "number"
+            },
+            "name": "chunkIndex"
+          },
+          {
+            "title": "param",
+            "description": "Size of each chunk",
+            "type": {
+              "type": "NameExpression",
+              "name": "number"
+            },
+            "name": "chunkSize"
+          },
+          {
+            "title": "param",
+            "description": "Function to transform chunk data to DHIS2 format",
+            "type": {
+              "type": "NameExpression",
+              "name": "function"
+            },
+            "name": "transformFn"
+          },
+          {
+            "title": "param",
+            "description": "Optional parameters for the DHIS2 upload",
+            "type": {
+              "type": "NameExpression",
+              "name": "object"
+            },
+            "name": "uploadOptions"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
     }
   ],
   "exports": [],
