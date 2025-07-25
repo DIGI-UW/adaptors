@@ -1,4 +1,7 @@
-import { execute as commonExecute } from '@openfn/language-common';
+import {
+  execute as commonExecute,
+  fn,
+} from '@openfn/language-common';
 import { expandReferences, throwError } from '@openfn/language-common/util';
 import { connect, getExcelChunk as sftpGetExcelChunk, disconnect } from '@openfn/language-sftp';
 import {
@@ -233,8 +236,8 @@ export function create(path, data, params = {}) {
       );
     }
 
-    handleResponse(response, state);
-    return state;
+    return handleResponse(response, state);
+
   };
 }
 
@@ -522,7 +525,7 @@ export function upsert(
           },
         },
       });
-      const resources = response.body[resourceType];
+      const resources = response.data[resourceType];
       if (resources.length > 1) {
         throwError(409, {
           description:
@@ -564,6 +567,92 @@ export function upsert(
 
     console.log(`Performed a "composed upsert" on ${resourceType}`);
     return handleResponse(response, state);
+  };
+}
+
+export function upsertOrganisationUnitHierarchy(
+  orgUnitStructures,
+  options = {}
+) {
+  return async function (state) {
+    console.log('Upserting organisation unit hierarchy...');
+    const { maxLevels, openingDate } = options;
+    if (!maxLevels) {
+      throw new Error('maxLevels option must be provided.');
+    }
+
+    const mappings = {}; // Map name to ID
+    const responses = []; // Collect all individual responses
+
+    const orgUnitsByLevel = orgUnitStructures.reduce((acc, ou) => {
+      acc[ou.level] = acc[ou.level] || [];
+      acc[ou.level].push(ou);
+      return acc;
+    }, {});
+
+    for (let level = 1; level <= maxLevels; level++) {
+      const orgUnits = orgUnitsByLevel[level] || [];
+      if (orgUnits.length > 0)
+        console.log(`Processing Level ${level}: ${orgUnits.length} units.`);
+
+      for (const orgUnit of orgUnits) {
+        const payload = {
+          name: orgUnit.name,
+          shortName: orgUnit.shortName,
+          code: orgUnit.code,
+          openingDate: openingDate || '2024-01-01',
+        };
+
+        if (orgUnit.parent) {
+          const parentId = mappings[orgUnit.parent];
+          if (!parentId) {
+            console.log(
+              `   ❌ ERROR: Parent '${orgUnit.parent}' not found. Skipping '${orgUnit.name}'.`
+            );
+            continue;
+          }
+          payload.parent = { id: parentId };
+        }
+
+        const upsertOp = upsert(
+          'organisationUnits',
+          { filter: `code:eq:${orgUnit.code}` },
+          payload
+        );
+
+        try {
+          await upsertOp(state); // This mutates state
+
+          // Deep copy the response before it's overwritten by the next operation
+          const responseData = JSON.parse(JSON.stringify(state.data));
+          responses.push(responseData);
+
+          if (responseData.response?.uid) {
+            const newId = responseData.response.uid;
+            mappings[orgUnit.name] = newId;
+            console.log(
+              `   ✓ Processed: ${orgUnit.name} (${newId}) - ${responseData.httpStatus}`
+            );
+          } else {
+            console.error(
+              `   ❌ ERROR: Could not determine UID from upsert response for '${orgUnit.name}'.`
+            );
+            console.error('      Response:', JSON.stringify(responseData, null, 2));
+          }
+        } catch (error) {
+          console.error(
+            `   ❌ Failed to upsert: ${orgUnit.name}. Error: ${error.message}`
+          );
+          responses.push({
+            error: error.message,
+            orgUnit: orgUnit.name,
+          });
+        }
+      }
+    }
+
+    // Set the final state to a combined report of all operations
+    state.data = { mappings, responses };
   };
 }
 

@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { create, get } from '../src/Adaptor.js';
+import { create, get, upsert } from '../src/Adaptor.js';
 
 // =============================================================================
 // Integration Test for language-dhis2
@@ -51,9 +51,8 @@ describe('DHIS2 Integration Tests', () => {
 
     const createOperation = create('organisationUnits', creationPayload);
 
-    let result;
     try {
-      result = await createOperation(state);
+      await createOperation(state);
     } catch (error) {
       console.error('❌ Test Failed: The create operation threw an error.');
       console.error('   This is likely due to a connection, authentication, or permission issue.');
@@ -63,23 +62,65 @@ describe('DHIS2 Integration Tests', () => {
     }
 
     console.log('✅ Create operation completed without throwing an error.');
-    console.log('📄 Full API Response:', JSON.stringify(result.data, null, 2));
+    console.log('📄 Full API Response stored in state:', JSON.stringify(state.data, null, 2));
     
 
     // Assertions to verify a successful response from DHIS2.
-    expect(result.data).to.exist;
-    expect(result.data.httpStatus).to.equal('Created');
-    expect(result.data.status).to.equal('OK');
-    expect(result.data.response).to.exist;
-    expect(result.data.response.uid).to.be.a('string');
+    expect(state.data).to.exist;
+    expect(state.data.httpStatus).to.equal('Created');
+    expect(state.data.status).to.equal('OK');
+    expect(state.data.response).to.exist;
+    expect(state.data.response.uid).to.be.a('string');
 
-    console.log(`✅ Successfully created org unit with UID: ${result.data.response.uid}`);
+    console.log(`✅ Successfully created org unit with UID: ${state.data.response.uid}`);
   }).timeout(timeout);
   
-  // Optional: Add a cleanup step if you want to automatically delete the test org unit.
+  it('should connect to DHIS2 and successfully upsert an organization unit', async function () {
+    this.timeout(timeout);
+
+    console.log(`🧪 Attempting to upsert org unit on: ${configuration.hostUrl}`);
+    console.log(`   Org Unit Name: 'Test Org Unit'`);
+    console.log(`   Org Unit Code: '${testOrgUnitCode}'`);
+
+    const upsertPayload = {
+      name: 'Test Org Unit',
+      shortName: 'Test OU',
+      code: testOrgUnitCode,
+      openingDate: '2024-01-01',
+    };
+
+    const upsertOperation = upsert(
+      'organisationUnits',
+      { filter: `code:eq:${testOrgUnitCode}` },
+      upsertPayload
+    );
+
+    try {
+      await upsertOperation(state);
+    } catch (error) {
+      console.error('❌ Test Failed: The upsert operation threw an error.');
+      console.error('   This is likely due to a connection, authentication, or permission issue.');
+
+      throw error;
+    }
+
+    console.log('✅ Upsert operation completed without throwing an error.');
+    console.log('📄 Full API Response stored in state:', JSON.stringify(state.data, null, 2));
+
+    // Assertions for a successful update response.
+    expect(state.data).to.exist;
+    expect(state.data.httpStatus).to.equal('OK');
+    expect(state.data.status).to.equal('OK');
+    expect(state.data.response).to.exist;
+    expect(state.data.status).to.equal('OK');
+    expect(state.data.response.uid).to.be.a('string');
+    expect(state.data.httpStatus).to.equal('OK');
+    expect(state.data.httpStatusCode).to.equal(200);
+
+  }).timeout(timeout);
+
   after(async function() {
     this.timeout(timeout);
-    // You could add a 'destroy' operation here to clean up the created org unit.
     console.log('ℹ️  Skipping cleanup. You may want to manually delete the test org unit.');
   });
 }); 
