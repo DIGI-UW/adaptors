@@ -3,7 +3,6 @@ import {
   fn,
 } from '@openfn/language-common';
 import { expandReferences, throwError } from '@openfn/language-common/util';
-import { connect, getExcelChunk as sftpGetExcelChunk, disconnect } from '@openfn/language-sftp';
 import {
   handleResponse,
   selectId,
@@ -20,6 +19,12 @@ import {
  * @property data - The response body (as JSON)
  * @property references - An array of all previous data objects used in the Job
  */
+
+/**
+ * Global SFTP client for batch processing
+ * @private
+ */
+let sftpClient = null;
 
 /**
  * Options object
@@ -83,6 +88,117 @@ function configMigrationHelper(state) {
     return state;
   }
   return state;
+}
+
+/**
+ * Connect to SFTP server (for combined credentials)
+ * @private
+ */
+function sftpConnect(state) {
+  const { sftpConfiguration } = state.configuration || {};
+  
+  if (!sftpConfiguration || !sftpConfiguration.host) {
+    console.log('ℹ️  DHIS2: No SFTP configuration found, skipping SFTP connection');
+    return state;
+  }
+  
+  console.log('🔗 DHIS2: Establishing SFTP connection...');
+  
+  if (sftpClient) {
+    console.log('⚠️  DHIS2: SFTP connection already exists, reusing existing connection');
+    return state;
+  }
+  
+  const SftpClient = require('ssh2-sftp-client');
+  sftpClient = new SftpClient();
+  
+  // Clean host URI if present
+  const cleanedConfig = { ...sftpConfiguration };
+  if (cleanedConfig.host && typeof cleanedConfig.host === 'string') {
+    cleanedConfig.host = cleanedConfig.host.replace(/^(sftp|ftp):\/\//, '');
+  }
+  
+  console.log(`🔗 DHIS2: Connecting to ${cleanedConfig.host}:${cleanedConfig.port || 22}`);
+  
+  return sftpClient.connect(cleanedConfig).then(() => {
+    console.log('✅ DHIS2: SFTP connection established successfully');
+    return state;
+  }).catch(error => {
+    console.error('❌ DHIS2: SFTP connection failed:', error.message);
+    sftpClient = null;
+    throw new Error(`DHIS2 SFTP connection failed: ${error.message}`);
+  });
+}
+
+/**
+ * Disconnect from SFTP server  
+ * @private
+ */
+function sftpDisconnect(state) {
+  if (!sftpClient) {
+    console.log('ℹ️  DHIS2: No SFTP connection to disconnect');
+    return state;
+  }
+  
+  console.log('🔌 DHIS2: Disconnecting from SFTP server...');
+  
+  try {
+    sftpClient.end();
+    console.log('✅ DHIS2: SFTP connection closed successfully');
+  } catch (error) {
+    console.warn('⚠️  DHIS2: Error closing SFTP connection:', error.message);
+  } finally {
+    sftpClient = null;
+  }
+  
+  return state;
+}
+
+/**
+ * Execute DHIS2 operations with SFTP support
+ * Use this when you need both DHIS2 and SFTP functionality in the same job
+ * @example
+ * executeWithSftp(
+ *   getExcelChunk('/path/file.xlsx', 0, 5000),
+ *   create('dataValueSets', transformedData)
+ * )(state)
+ * @public
+ * @param {Operations} operations - Operations to be performed
+ * @returns {Operation}
+ */
+export function executeWithSftp(...operations) {
+  const initialState = {
+    references: [],
+    data: null,
+  };
+
+  return state => {
+    const version = state.configuration?.apiVersion;
+
+    if (+version < 36) {
+      console.warn(
+        `WARNING: This adaptor is INCOMPATIBLE with DHIS2 tracker API versions before v36. Some functionality may break. See https://docs.dhis2.org/en/develop/using-the-api/dhis-core-version-master/tracker.html`
+      );
+    }
+
+    return commonExecute(
+      configMigrationHelper,
+      sftpConnect,      // Connect to SFTP if needed
+      ...operations,    // Your operations (can now use SFTP)
+      sftpDisconnect    // Disconnect from SFTP
+    )({ ...initialState, ...state }).catch(error => {
+      console.error('❌ DHIS2: executeWithSftp encountered error:', error.message);
+      
+      // Emergency cleanup
+      try {
+        sftpDisconnect(state);
+      } catch (cleanupError) {
+        console.warn('⚠️  DHIS2: Error during emergency SFTP cleanup:', cleanupError.message);
+      }
+      
+      throw error;
+    });
+  };
 }
 
 /**
@@ -510,7 +626,6 @@ export function upsert(
         resolvedData
       );
     } else {
-      console.log(`Preparing upsert via 'get' then 'create' OR 'update'...`);
       response = await request(configuration, {
         method: 'GET',
         path: prefixVersionToPath(
@@ -534,7 +649,6 @@ export function upsert(
           error: 'Conflict',
         });
       } else if (resources.length <= 0) {
-        console.log(`Preparing create operation...`);
         response = await request(configuration, {
           method: 'POST',
           path: prefixVersionToPath(
@@ -550,7 +664,6 @@ export function upsert(
         // ID to be used in the subsequent `update` by the path determined
         // by the `selectId(...)` function.
         const path = resources[0][selectId(resourceType)];
-        console.log(`Preparing update operation...`);
         response = await request(configuration, {
           method: 'PUT',
           path: prefixVersionToPath(
@@ -564,8 +677,6 @@ export function upsert(
         });
       }
     }
-
-    console.log(`Performed a "composed upsert" on ${resourceType}`);
     return handleResponse(response, state);
   };
 }
@@ -630,14 +741,10 @@ export function upsertOrganisationUnitHierarchy(
           if (responseData.response?.uid) {
             const newId = responseData.response.uid;
             mappings[orgUnit.name] = newId;
-            console.log(
-              `   ✓ Processed: ${orgUnit.name} (${newId}) - ${responseData.httpStatus}`
-            );
           } else {
             console.error(
               `   ❌ ERROR: Could not determine UID from upsert response for '${orgUnit.name}'.`
             );
-            console.error('      Response:', JSON.stringify(responseData, null, 2));
           }
         } catch (error) {
           console.error(
@@ -760,56 +867,39 @@ export function getExcelChunk(filePath, chunkIndex = 0, chunkSize = 5000, option
     console.log(`📄 DHIS2: Reading Excel chunk ${chunkIndex + 1} from ${filePath}`);
     console.log(`📊 DHIS2: Chunk size: ${chunkSize}`);
     
-    // Extract SFTP configuration from state
-    const { sftpConfiguration } = state;
-    if (!sftpConfiguration || !sftpConfiguration.host) {
-      throw new Error('DHIS2 getExcelChunk: SFTP configuration missing from state. Expected: { sftpConfiguration: { host, username, password, ... } }');
+    // Use the connected SFTP client (managed by executeWithSftp)
+    if (!sftpClient || !sftpClient.sftp) {
+      throw new Error('DHIS2 getExcelChunk: No SFTP connection available. Make sure to use executeWithSftp() to wrap your operations.');
     }
-    
-    console.log(`📡 DHIS2: Using SFTP adaptor for Excel chunk reading`);
     
     try {
       const startTime = Date.now();
       
-      // Create SFTP-compatible state
-      const sftpState = {
-        ...state,
-        configuration: sftpConfiguration
-      };
+      // Read the Excel file buffer using the managed SFTP connection
+      console.log(`📖 DHIS2: Reading Excel chunk ${chunkIndex + 1} from ${filePath}`);
+      const buffer = await sftpClient.get(filePath);
       
-      // Execute SFTP operations in sequence
-      const connectedState = await connect(sftpState);
-      console.log('✅ DHIS2: SFTP connection established');
-      
-      const chunkState = await sftpGetExcelChunk(filePath, chunkIndex, chunkSize)(connectedState);
+      // Process the Excel chunk using the buffer
+      const result = await processExcelChunk(buffer, filePath, chunkIndex, chunkSize);
       
       const totalDuration = Date.now() - startTime;
-      console.log(`🎉 DHIS2: Excel chunk processing completed in ${totalDuration}ms`);
-      console.log(`📊 DHIS2: Chunk data rows: ${chunkState.chunkData?.length || 0}`);
+      console.log(`✅ DHIS2: Successfully read chunk ${chunkIndex + 1} with ${result.chunkData.length} rows in ${totalDuration}ms`);
       
-      // Ensure SFTP connection is closed
-      try {
-        await disconnect(chunkState);
-      } catch (err) {
-        console.warn('⚠️  DHIS2: Error closing SFTP connection:', err.message);
-      }
-      
-      // Return state with DHIS2-compatible structure
-      return {
-        ...state,
-        chunkData: chunkState.chunkData,
+      // Return state with only current chunk data (memory efficient)
+      return { 
+        ...state, 
+        chunkData: result.chunkData,
         chunkMetadata: {
-          chunkIndex,
-          chunkSize,
-          rowsInChunk: chunkState.chunkData?.length || 0,
-          filePath,
-          processedAt: new Date().toISOString(),
-          ...chunkState.chunkMetadata
+          chunkIndex: result.chunkIndex,
+          chunkSize: result.chunkSize,
+          rowsInChunk: result.chunkData.length,
+          filePath: result.filePath,
+          processedAt: new Date().toISOString()
         }
       };
       
     } catch (error) {
-      console.error('❌ DHIS2: getExcelChunk failed:', error.message);
+      console.error('❌ DHIS2: Excel chunk reading failed:', error.message);
       throw new Error(`Excel chunk reading failed: ${error.message}`);
     }
   };
@@ -923,6 +1013,194 @@ export function processExcelChunkToDHIS2(filePath, chunkIndex, chunkSize, transf
         }
       };
     }
+  };
+}
+
+/**
+ * Process Excel chunk from buffer (re-implemented from SFTP adaptor for memory efficiency)
+ * @private
+ */
+async function processExcelChunk(buffer, filePath, chunkIndex, chunkSize) {
+  console.log('🔧 DHIS2: Starting Excel chunk processing...');
+  console.log('🔧 DHIS2: Target chunk:', chunkIndex);
+  console.log('🔧 DHIS2: Chunk size:', chunkSize);
+  
+  // Import modules
+  let xlstreamModule;
+  let writeFileSync, unlinkSync, join, tmpdir;
+  
+  try {
+    xlstreamModule = await import('xlstream');
+    const fsModule = await import('fs');
+    const pathModule = await import('path');
+    const osModule = await import('os');
+    
+    writeFileSync = fsModule.writeFileSync;
+    unlinkSync = fsModule.unlinkSync;
+    join = pathModule.join;
+    tmpdir = osModule.tmpdir;
+    
+    console.log('✅ DHIS2: Required modules imported for chunk processing');
+  } catch (importError) {
+    console.error('❌ DHIS2: Failed to import required modules:', importError.message);
+    throw new Error(`Module import failed: ${importError.message}`);
+  }
+  
+  const { getXlsxStream } = xlstreamModule;
+  
+  // Create temporary file
+  const tempDir = tmpdir();
+  const tempFileName = `excel-chunk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.xlsx`;
+  const tempFilePath = join(tempDir, tempFileName);
+  
+  console.log('🔧 DHIS2: Creating temporary file for chunk:', tempFilePath);
+  
+  let tempFileCreated = false;
+  
+  try {
+    writeFileSync(tempFilePath, buffer);
+    tempFileCreated = true;
+    
+    return new Promise(async (resolve, reject) => {
+      // Helper function to clean up temporary file
+      const cleanupTempFile = () => {
+        if (tempFileCreated) {
+          try {
+            unlinkSync(tempFilePath);
+            console.log('✅ DHIS2: Temporary chunk file cleaned up');
+          } catch (cleanupError) {
+            console.warn('⚠️  DHIS2: Could not clean up temporary chunk file:', cleanupError.message);
+          }
+        }
+      };
+      
+      try {
+        const streamOptions = {
+          filePath: tempFilePath,
+          sheet: 0,
+          withHeader: true,
+          ignoreEmpty: true,
+        };
+        
+        const stream = await getXlsxStream(streamOptions);
+        
+        let currentRow = 0;
+        let chunkData = [];
+        let finished = false;
+        
+        const startRow = chunkIndex * chunkSize;
+        const endRow = startRow + chunkSize - 1;
+        
+        console.log('🔧 DHIS2: Target row range:', startRow, 'to', endRow);
+        
+        stream.on('data', (row) => {
+          if (finished) return;
+          
+          // Check if we're in the target chunk range
+          if (currentRow >= startRow && currentRow <= endRow) {
+            chunkData.push(row.formatted || row);
+            
+            // Log progress within chunk
+            if (chunkData.length % 1000 === 0) {
+              console.log('📦 DHIS2: Chunk data collected:', chunkData.length, 'rows');
+            }
+          }
+          
+          currentRow++;
+          
+          // Stop processing if we've collected the full chunk
+          if (chunkData.length >= chunkSize) {
+            console.log('📦 DHIS2: Chunk collection complete');
+            finished = true;
+            stream.destroy();
+            cleanupTempFile();
+            resolve(createChunkResult(chunkData, chunkIndex, chunkSize, filePath));
+            return;
+          }
+          
+          // Skip ahead if we haven't reached the target chunk yet
+          if (currentRow < startRow && currentRow % 10000 === 0) {
+            console.log('📊 DHIS2: Skipping to chunk, current row:', currentRow);
+          }
+        });
+        
+        stream.on('end', () => {
+          console.log('✅ DHIS2: Chunk stream ended successfully');
+          
+          if (!finished) {
+            finished = true;
+            cleanupTempFile();
+            resolve(createChunkResult(chunkData, chunkIndex, chunkSize, filePath));
+          }
+        });
+        
+        stream.on('error', (error) => {
+          console.error('❌ DHIS2: Chunk stream error:', error.message);
+          console.error('❌ DHIS2: Error details:', {
+            code: error.code,
+            message: error.message,
+            chunkIndex,
+            chunkSize,
+            currentRow,
+            collectedRows: chunkData.length
+          });
+          
+          if (!finished) {
+            finished = true;
+            cleanupTempFile();
+            reject(new Error(`Excel chunk processing failed for chunk ${chunkIndex}: ${error.message}`));
+          }
+        });
+        
+        // Handle stream close events
+        stream.on('close', () => {
+          console.log('📡 DHIS2: Chunk stream closed');
+          if (!finished) {
+            console.log('✅ DHIS2: Chunk processing completed on stream close');
+            finished = true;
+            cleanupTempFile();
+            resolve(createChunkResult(chunkData, chunkIndex, chunkSize, filePath));
+          }
+        });
+        
+      } catch (error) {
+        console.error('❌ DHIS2: Error in chunk processing:', error.message);
+        cleanupTempFile();
+        reject(error);
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ DHIS2: Error in processExcelChunk:', error.message);
+    // Clean up if we created the file but failed before returning the Promise
+    if (tempFileCreated) {
+      try {
+        unlinkSync(tempFilePath);
+        console.log('✅ DHIS2: Temporary chunk file cleaned up after error');
+      } catch (cleanupError) {
+        console.warn('⚠️  DHIS2: Could not clean up temporary chunk file:', cleanupError.message);
+      }
+    }
+    throw error;
+  }
+}
+
+
+
+/**
+ * Create chunk result object (re-implemented from SFTP adaptor)
+ * @private
+ */
+function createChunkResult(chunkData, chunkIndex, chunkSize, filePath) {
+  console.log('📦 DHIS2: Chunk complete:');
+  console.log('   - Chunk index:', chunkIndex);
+  console.log('   - Rows collected:', chunkData.length);
+  
+  return {
+    chunkData,
+    chunkIndex,
+    chunkSize,
+    filePath
   };
 }
 

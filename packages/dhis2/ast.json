@@ -1,6 +1,44 @@
 {
   "operations": [
     {
+      "name": "executeWithSftp",
+      "params": [
+        "operations"
+      ],
+      "docs": {
+        "description": "Execute DHIS2 operations with SFTP support\nUse this when you need both DHIS2 and SFTP functionality in the same job",
+        "tags": [
+          {
+            "title": "example",
+            "description": "executeWithSftp(\n  getExcelChunk('/path/file.xlsx', 0, 5000),\n  create('dataValueSets', transformedData)\n)(state)"
+          },
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "param",
+            "description": "Operations to be performed",
+            "type": {
+              "type": "NameExpression",
+              "name": "Operations"
+            },
+            "name": "operations"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
       "name": "create",
       "params": [
         "path",

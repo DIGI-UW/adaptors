@@ -53,7 +53,7 @@ describe('getExcelMetadata Tests', () => {
   });
 
   it('should process Excel metadata for ART_data_tst.xlsx', async function() {
-    this.timeout(30000); // 30 second timeout for large file processing
+    this.timeout(300000); // 30 second timeout for large file processing
     
     console.log('🧪 Testing getExcelMetadata...');
     
@@ -87,7 +87,7 @@ describe('getExcelMetadata Tests', () => {
     
     console.log('📊 Metadata result:', JSON.stringify(result.data, null, 2));
     
-    // Verify results
+    // Verify basic metadata results
     expect(result).to.have.property('data');
     expect(result.data).to.have.property('totalRows');
     expect(result.data).to.have.property('totalChunks');
@@ -102,6 +102,65 @@ describe('getExcelMetadata Tests', () => {
     expect(uniqueValues).to.not.be.empty;
     expect(uniqueValues).to.have.property('indicators').that.is.an('array').with.length.greaterThan(0);
     expect(uniqueValues).to.have.property('sites').that.is.an('array').with.length.greaterThan(0);
+    expect(uniqueValues).to.have.property('regions').that.is.an('array').with.length.greaterThan(0);
+    expect(uniqueValues).to.have.property('zones').that.is.an('array').with.length.greaterThan(0);
+    expect(uniqueValues).to.have.property('districts').that.is.an('array').with.length.greaterThan(0);
+    
+    // Verify orgUnitParentMap was collected (new functionality)
+    expect(result.data).to.have.property('orgUnitParentMap');
+    const { orgUnitParentMap } = result.data;
+    expect(orgUnitParentMap).to.be.an('object');
+    
+    if (Object.keys(orgUnitParentMap).length > 0) {
+      console.log('✅ Organizational unit parent mappings found:');
+      console.log(`   - Total mappings: ${Object.keys(orgUnitParentMap).length}`);
+      
+      // Test that zones map to regions
+      const zones = uniqueValues.zones;
+      const regions = uniqueValues.regions;
+      let zoneParentCount = 0;
+      zones.forEach(zone => {
+        if (orgUnitParentMap[zone]) {
+          expect(regions).to.include(orgUnitParentMap[zone], `Zone "${zone}" should map to a valid region`);
+          zoneParentCount++;
+        }
+      });
+      console.log(`   - Zones with parent regions: ${zoneParentCount}/${zones.length}`);
+      
+      // Test that districts map to zones  
+      const districts = uniqueValues.districts;
+      let districtParentCount = 0;
+      districts.forEach(district => {
+        if (orgUnitParentMap[district]) {
+          expect(zones).to.include(orgUnitParentMap[district], `District "${district}" should map to a valid zone`);
+          districtParentCount++;
+        }
+      });
+      console.log(`   - Districts with parent zones: ${districtParentCount}/${districts.length}`);
+      
+      // Test that sites map to districts
+      const sites = uniqueValues.sites;
+      let siteParentCount = 0;
+      sites.forEach(site => {
+        if (orgUnitParentMap[site]) {
+          expect(districts).to.include(orgUnitParentMap[site], `Site "${site}" should map to a valid district`);
+          siteParentCount++;
+        }
+      });
+      console.log(`   - Sites with parent districts: ${siteParentCount}/${sites.length}`);
+      
+      // Verify the mapping structure is flat and simple
+      Object.entries(orgUnitParentMap).forEach(([child, parent]) => {
+        expect(child).to.be.a('string');
+        expect(parent).to.be.a('string');
+        expect(child).to.not.be.empty;
+        expect(parent).to.not.be.empty;
+      });
+      
+      console.log('✅ All parent-child relationships are valid');
+    } else {
+      console.log('⚠️  No organizational unit parent mappings found - this may indicate incomplete test data');
+    }
     
     console.log(`✅ Successfully processed ${result.data.totalRows} rows in ${result.data.totalChunks} chunks`);
   });

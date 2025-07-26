@@ -172,7 +172,7 @@ export function connect(state) {
 
   const connectConfig = {
     ...cleanedConfig,
-    readyTimeout: 100000, // 10 second timeout
+    readyTimeout: 100000, // 100 second timeout
     retries: 1
   };
 
@@ -973,6 +973,7 @@ async function processExcelMetadata(buffer, filePath, chunkSize, options = {}) {
         
         // Initialize unique value collectors based on column mapping
         const uniqueValues = {};
+        const orgUnitParentMap = {}; // Simple mapping: orgUnit -> parent
         if (options.columnMapping) {
           Object.keys(options.columnMapping).forEach(key => {
             uniqueValues[key] = new Set();
@@ -988,15 +989,32 @@ async function processExcelMetadata(buffer, filePath, chunkSize, options = {}) {
           const rowData = (row.raw && row.raw.obj) || (row.formatted && row.formatted.obj) || row;
           
           if (options.columnMapping) {
+            // First pass: collect values from this row
+            const rowValues = {};
             Object.entries(options.columnMapping).forEach(([key, possibleColumns]) => {
               // Try each possible column name for this key
               for (const columnName of possibleColumns) {
                 if (rowData[columnName] !== undefined && rowData[columnName] !== null && rowData[columnName] !== '') {
                   uniqueValues[key].add(rowData[columnName]);
+                  rowValues[key] = rowData[columnName];
                   break; // Stop at first match
                 }
               }
             });
+            
+            // Second pass: build parent-child relationships from this row
+            // Only store if mapping doesn't already exist to avoid redundant work
+            if (rowValues.regions && rowValues.zones && !orgUnitParentMap[rowValues.zones]) {
+              orgUnitParentMap[rowValues.zones] = rowValues.regions;
+            }
+            
+            if (rowValues.zones && rowValues.districts && !orgUnitParentMap[rowValues.districts]) {
+              orgUnitParentMap[rowValues.districts] = rowValues.zones;
+            }
+            
+            if (rowValues.districts && rowValues.sites && !orgUnitParentMap[rowValues.sites]) {
+              orgUnitParentMap[rowValues.sites] = rowValues.districts;
+            }
           }
           
           // Log progress every 10K rows
@@ -1011,7 +1029,7 @@ async function processExcelMetadata(buffer, filePath, chunkSize, options = {}) {
           if (!finished) {
             finished = true;
             cleanupTempFile();
-            resolve(createMetadataResult(totalRows, chunkSize, filePath, uniqueValues));
+            resolve(createMetadataResult(totalRows, chunkSize, filePath, uniqueValues, orgUnitParentMap));
           }
         });
         
@@ -1037,7 +1055,7 @@ async function processExcelMetadata(buffer, filePath, chunkSize, options = {}) {
             console.log('✅ SFTP: Metadata processing completed on stream close');
             finished = true;
             cleanupTempFile();
-            resolve(createMetadataResult(totalRows, chunkSize, filePath, uniqueValues));
+            resolve(createMetadataResult(totalRows, chunkSize, filePath, uniqueValues, hierarchyRelations));
           }
         });
         
@@ -1236,7 +1254,7 @@ async function processExcelChunk(buffer, filePath, chunkIndex, chunkSize) {
  * Create metadata result object
  * @private
  */
-function createMetadataResult(totalRows, chunkSize, filePath, uniqueValues = null) {
+function createMetadataResult(totalRows, chunkSize, filePath, uniqueValues = null, orgUnitParentMap = null) {
   const totalChunks = Math.ceil(totalRows / chunkSize);
   const chunks = [];
   
@@ -1274,6 +1292,17 @@ function createMetadataResult(totalRows, chunkSize, filePath, uniqueValues = nul
   } else {
     console.log('📊 SFTP: No unique values collected (no column mapping provided)');
   }
+
+     // Log organizational unit parent mappings
+   if (orgUnitParentMap && Object.keys(orgUnitParentMap).length > 0) {
+     console.log('📊 SFTP: Organizational unit parent mappings discovered:');
+     console.log(`   - Total mappings: ${Object.keys(orgUnitParentMap).length}`);
+     Object.entries(orgUnitParentMap).forEach(([orgUnit, parent]) => {
+       console.log(`     - ${orgUnit} -> ${parent}`);
+     });
+   } else {
+     console.log('📊 SFTP: No organizational unit parent mappings collected');
+   }
   
   const result = {
     fileName: filePath,
@@ -1291,6 +1320,11 @@ function createMetadataResult(totalRows, chunkSize, filePath, uniqueValues = nul
   if (uniqueValuesArrays) {
     result.uniqueValues = uniqueValuesArrays;
   }
+
+     // Add organizational unit parent mappings if collected
+   if (orgUnitParentMap) {
+     result.orgUnitParentMap = orgUnitParentMap;
+   }
   
   return result;
 }
