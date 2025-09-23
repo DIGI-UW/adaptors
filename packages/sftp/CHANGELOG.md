@@ -1,59 +1,18 @@
 # @openfn/language-sftp
 
-## 3.0.3 - 18 September 2025
+# @openfn/language-sftp
+
+## 2.1.0 - 23 September 2025
+
+### Minor Changes
+
+- Added `stateStore` helper (`load`, `save`, `destroy`) for workflow state persistence.
+- Introduced hybrid state/locking utilities to complement DHIS2 dataStore operations.
+- Imported `createHash` to support hash generation in CSV metadata handling.
 
 ### Patch Changes
 
-- Updated dependencies \[e2bc436]
-  - @openfn/language-common@3.1.0
-
-## 3.0.2 - 01 September 2025
-
-### Patch Changes
-
-- Updated dependencies \[1d60531]
-  - @openfn/language-common@3.0.3
-
-## 3.0.1 - 28 August 2025
-
-### Patch Changes
-
-- b7af59a: - Update `package.json` description to be LLM-readable
-
-## 3.0.0 - 11 August 2025
-
-### Major Changes
-
-- a5cea4e: removed `http` export from `@openfn/language-common`
-
-  ### Migration Guide
-
-  The `http` export has been removed from `@openfn/language-common`. If you were
-  using it, you should remove it from your code and create a new step that uses
-  `http` adaptor. See example below.
-
-  **Before**
-
-  **Step 1: Fetch and post data using postgresql adaptor**
-
-  ```js
-  sql('select * from foo');
-  http.post('/example', { body: $.data }),
-  ```
-
-  **Now**
-
-  **Step 1: Fetch data using postgresql adaptor**
-
-  ```js
-  sql('select * from foo');
-  ```
-
-  **Step 2: Post data using http adaptor**
-
-  ```js
-  post('/example', { body: $.data });
-  ```
+- Updated job orchestration to consume adaptor-level state helpers instead of bespoke workflow modules.
 
 ## 2.0.17 - 14 July 2025
 

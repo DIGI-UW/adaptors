@@ -1,8 +1,8 @@
 {
-  "name": "@openfn/language-dhis2",
-  "label": "DHIS2",
-  "version": "7.1.3-custom",
-  "description": "OpenFn adaptor for DHIS2",
+  "name": "@openfn/language-sftp",
+  "label": "SFTP",
+  "version": "2.0.17-custom",
+  "description": "An SFTP language package for use with Open Function (Enhanced with URI fixing, manual connection control, and comprehensive logging)",
   "homepage": "https://docs.openfn.org",
   "repository": {
     "type": "git",
@@ -16,18 +16,14 @@
     },
     "./package.json": "./package.json"
   },
-  "types": "types/index.d.ts",
+  "main": "dist/index.cjs",
   "scripts": {
-    "build": "pnpm clean && build-adaptor dhis2",
-    "build:debug": "pnpm clean && build-adaptor dhis2 --sourcemap",
-    "test": "mocha test/index.test.js",
-    "test:watch": "mocha -w test/**/*.test.js",
-    "test:file": "mocha test/${FILE}",
-    "test:grep": "mocha test/**/*.test.js --grep \"${GREP}\"",
-    "test:single": "mocha",
+    "build": "pnpm clean && build-adaptor sftp",
+    "test": "mocha --experimental-specifier-resolution=node --no-warnings test/*.js",
+    "test:watch": "mocha -w --experimental-specifier-resolution=node --no-warnings",
     "clean": "rimraf dist types docs",
     "pack": "pnpm pack --pack-destination ../../dist",
-    "lint": "eslint src/**"
+    "lint": "eslint src"
   },
   "author": "Open Function Group",
   "license": "LGPLv3",
@@ -39,21 +35,22 @@
   ],
   "dependencies": {
     "@openfn/language-common": "workspace:*",
-    "@openfn/language-sftp": "workspace:*",
-    "axios": "^1.8.2",
     "lodash": "^4.17.21",
-    "qs": "^6.11.0",
     "ssh2-sftp-client": "9.0.4",
     "xlstream": "^2.5.5"
   },
   "devDependencies": {
     "assertion-error": "2.0.0",
-    "chai": "4.3.6",
-    "chai-http": "4.3.0",
+    "chai": "^4.3.7",
     "deep-eql": "4.1.1",
-    "jsonpath": "^1.1.1",
-    "rimraf": "3.0.2"
+    "eslint": "8.26.0",
+    "eslint-config-airbnb-base": "15.0.0",
+    "eslint-plugin-import": "2.26.0",
+    "mocha": "^10.2.0",
+    "nock": "12.0.3",
+    "rimraf": "^3.0.2",
+    "testdouble": "^3.16.9"
   },
   "type": "module",
-  "main": "dist/index.cjs"
+  "types": "types/index.d.ts"
 }

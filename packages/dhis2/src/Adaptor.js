@@ -11,6 +11,8 @@ import {
   prefixVersionToPath,
   request,
 } from './util.js';
+import { dataStoreGet, dataStoreSet, dataStoreDelete } from './store.js';
+import { acquireLock, releaseLock } from './locks.js';
 
 /**
  * State object
@@ -356,6 +358,53 @@ export function create(path, data, params = {}) {
 
   };
 }
+
+export const dataStore = {
+  get: (namespace, key, options = {}) =>
+    async state => {
+      const result = await dataStoreGet(state.configuration, namespace, key, options);
+      return {
+        ...state,
+        data: result,
+      };
+    },
+  set: (namespace, key, value) =>
+    async state => {
+      const result = await dataStoreSet(state.configuration, namespace, key, value);
+      return {
+        ...state,
+        data: result,
+      };
+    },
+  delete: (namespace, key) =>
+    async state => {
+      await dataStoreDelete(state.configuration, namespace, key);
+      return state;
+    },
+};
+
+export const locks = {
+  acquire: options =>
+    async state => {
+      const outcome = await acquireLock(state.configuration, {
+        ...options,
+        state,
+      });
+
+      return {
+        ...state,
+        data: outcome.lock,
+        lockAcquired: outcome.acquired,
+      };
+    },
+  release: lock =>
+    async state => {
+      if (lock) {
+        await releaseLock(state.configuration, lock);
+      }
+      return state;
+    },
+};
 
 /**
  * Get any resource, as JSON, from DHIS2. Pass in any valid DHIS2 REST path, excluding /api and the version.

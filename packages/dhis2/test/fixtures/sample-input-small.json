@@ -1,0 +1,60 @@
+{
+  "config": {
+    "maxLevels": 3
+  },
+  "data": {
+    "dhis2Structures": {
+      "orgUnits": [
+        {
+          "code": "MW",
+          "level": 1,
+          "name": "Malawi",
+          "parent": null,
+          "shortName": "Malawi"
+        },
+        {
+          "code": "CENTRAL_REGION",
+          "level": 2,
+          "name": "Central Region",
+          "parent": "Malawi",
+          "shortName": "Central Region"
+        },
+        {
+          "code": "NORTHERN_REGION",
+          "level": 2,
+          "name": "Northern Region",
+          "parent": "Malawi",
+          "shortName": "Northern Region"
+        },
+        {
+          "code": "SOUTHERN_REGION",
+          "level": 2,
+          "name": "Southern Region",
+          "parent": "Malawi",
+          "shortName": "Southern Region"
+        },
+        {
+          "code": "CENTRAL_EAST_ZONE",
+          "level": 3,
+          "name": "Central East Zone",
+          "parent": "Central Region",
+          "shortName": "Central East Zone"
+        },
+        {
+          "code": "CENTRAL_WEST_ZONE",
+          "level": 3,
+          "name": "Central West Zone",
+          "parent": "Central Region",
+          "shortName": "Central West Zone"
+        },
+        {
+          "code": "NORTHERN_ZONE",
+          "level": 3,
+          "name": "Northern Zone",
+          "parent": "Northern Region",
+          "shortName": "Northern Zone"
+        }
+      ]
+    }
+  }
+} 

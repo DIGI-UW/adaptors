@@ -1,65 +1,17 @@
 # @openfn/language-dhis2
 
-## 8.0.3 - 23 September 2025
+# @openfn/language-dhis2
+
+## 7.1.3 - 23 September 2025
+
+### Minor Changes
+
+- Added `dataStore` helper operations (`get`, `set`, `delete`) and `locks` helpers (`acquire`, `release`) to expose DHIS2 dataStore state management and workflow locking.
+- Introduced `prepareMetadata` orchestrator to encapsulate organisational unit/category/data element setup before data uploads.
 
 ### Patch Changes
 
-- 24c5f07: Export `http` functions. This fixes the "http is not defined" error
-
-## 8.0.2 - 18 September 2025
-
-### Patch Changes
-
-- Updated dependencies \[e2bc436]
-  - @openfn/language-common@3.1.0
-
-## 8.0.1 - 01 September 2025
-
-### Patch Changes
-
-- Updated dependencies \[1d60531]
-  - @openfn/language-common@3.0.3
-
-## 8.0.0 - 11 August 2025
-
-### Major Changes
-
-- a5cea4e: removed `http` export from `@openfn/language-common`
-
-  ### Migration Guide
-
-  The `http` export has been removed from `@openfn/language-common`. If you were
-  using it, you should remove it from your code and create a new step that uses
-  `http` adaptor. See example below.
-
-  **Before**
-
-  **Step 1: Fetch and post data using postgresql adaptor**
-
-  ```js
-  sql('select * from foo');
-  http.post('/example', { body: $.data }),
-  ```
-
-  **Now**
-
-  **Step 1: Fetch data using postgresql adaptor**
-
-  ```js
-  sql('select * from foo');
-  ```
-
-  **Step 2: Post data using http adaptor**
-
-  ```js
-  post('/example', { body: $.data });
-  ```
-
-## 7.1.3 - 23 July 2025
-
-### Patch Changes
-
-- aeb09c4: Fix an issue in metadata generation
+- Updated state persistence for workflows to rely on adaptor helpers instead of custom job utilities.
 
 ## 7.1.2 - 14 July 2025
 
