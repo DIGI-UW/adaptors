@@ -3,8 +3,10 @@ import {
   composeNextState,
   parseCsv,
 } from '@openfn/language-common';
+import { createHash } from 'crypto';
 import Client from 'ssh2-sftp-client';
 import { isObjectEmpty, handleResponse } from './Utils';
+import { loadState, saveState, deleteState } from './state.js';
 import { Readable } from 'stream';
 
 
@@ -58,6 +60,27 @@ export function execute(...operations) {
       throw e;
     });
 }
+
+export const stateStore = {
+  load: (namespace, key) => async state => {
+    const value = loadState(namespace, key);
+    return {
+      ...state,
+      data: value,
+    };
+  },
+  save: (namespace, key, value) => async state => {
+    saveState(namespace, key, value);
+    return {
+      ...state,
+      data: value,
+    };
+  },
+  destroy: (namespace, key) => async state => {
+    deleteState(namespace, key);
+    return state;
+  },
+};
 
 /**
  * Execute a sequence of operations with manual connection management.

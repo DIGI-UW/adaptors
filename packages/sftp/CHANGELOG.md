@@ -1,5 +1,19 @@
 # @openfn/language-sftp
 
+# @openfn/language-sftp
+
+## 2.1.0 - 23 September 2025
+
+### Minor Changes
+
+- Added `stateStore` helper (`load`, `save`, `destroy`) for workflow state persistence.
+- Introduced hybrid state/locking utilities to complement DHIS2 dataStore operations.
+- Imported `createHash` to support hash generation in CSV metadata handling.
+
+### Patch Changes
+
+- Updated job orchestration to consume adaptor-level state helpers instead of bespoke workflow modules.
+
 ## 2.0.17 - 14 July 2025
 
 ### Patch Changes

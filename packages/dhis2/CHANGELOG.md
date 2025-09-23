@@ -1,5 +1,18 @@
 # @openfn/language-dhis2
 
+# @openfn/language-dhis2
+
+## 7.1.3 - 23 September 2025
+
+### Minor Changes
+
+- Added `dataStore` helper operations (`get`, `set`, `delete`) and `locks` helpers (`acquire`, `release`) to expose DHIS2 dataStore state management and workflow locking.
+- Introduced `prepareMetadata` orchestrator to encapsulate organisational unit/category/data element setup before data uploads.
+
+### Patch Changes
+
+- Updated state persistence for workflows to rely on adaptor helpers instead of custom job utilities.
+
 ## 7.1.2 - 14 July 2025
 
 ### Patch Changes

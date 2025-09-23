@@ -1,0 +1,1313 @@
+{
+  "operations": [
+    {
+      "name": "execute",
+      "params": [
+        "operations"
+      ],
+      "docs": {
+        "description": "Execute a sequence of operations with automatic connection management.\nWraps `language-common/execute`, and prepends initial state for sftp.",
+        "tags": [
+          {
+            "title": "example",
+            "description": "execute(\n  list('/some/path/'),\n  getCSV('/data.csv')\n)(state)"
+          },
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "param",
+            "description": "Operations to be performed.",
+            "type": {
+              "type": "NameExpression",
+              "name": "Operations"
+            },
+            "name": "operations"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "executeManual",
+      "params": [
+        "operations"
+      ],
+      "docs": {
+        "description": "Execute a sequence of operations with manual connection management.\nUse this when you want to control SFTP connection/disconnection manually within your job.",
+        "tags": [
+          {
+            "title": "example",
+            "description": "executeManual(\n  connect,\n  list('/some/path/'),\n  getCSV('/data.csv'),\n  disconnect\n)(state)"
+          },
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "param",
+            "description": "Operations to be performed.",
+            "type": {
+              "type": "NameExpression",
+              "name": "Operations"
+            },
+            "name": "operations"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "connect",
+      "params": [
+        "state"
+      ],
+      "docs": {
+        "description": "Connect to SFTP server",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "executeManual(\n  connect,\n  list('/some/path/'),\n  disconnect\n)(state)"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "disconnect",
+      "params": [
+        "state"
+      ],
+      "docs": {
+        "description": "Disconnect from SFTP server",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "executeManual(\n  connect,\n  list('/some/path/'),\n  disconnect\n)(state)"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "list",
+      "params": [
+        "dirPath",
+        "filter",
+        "callback"
+      ],
+      "docs": {
+        "description": "List files present in a directory",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "list('/some/path/')",
+            "caption": "basic files listing"
+          },
+          {
+            "title": "example",
+            "description": "list('/some/path/', file=> {\n return /foo.\\.txt/.test(file.name);\n})",
+            "caption": "list files with filters"
+          },
+          {
+            "title": "example",
+            "description": "list(\n  \"/some/path/\",\n  (file) => /foo.\\.txt/.test(file.name),\n  (state) => {\n    const latestFile = state.data.filter(\n      (file) => file.modifyTime <= new Date()\n    );\n    return { ...state, latestFile };\n  }\n);",
+            "caption": "list files with filters and use callback"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": "Path to remote directory",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "dirPath"
+          },
+          {
+            "title": "param",
+            "description": "a filter function used to select return entries",
+            "type": {
+              "type": "NameExpression",
+              "name": "function"
+            },
+            "name": "filter"
+          },
+          {
+            "title": "param",
+            "description": "Optional callback to handle the response",
+            "type": {
+              "type": "OptionalType",
+              "expression": {
+                "type": "NameExpression",
+                "name": "function"
+              }
+            },
+            "name": "callback"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "get",
+      "params": [
+        "filePath",
+        "localPath"
+      ],
+      "docs": {
+        "description": "Get a file from SFTP server",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "get('/path/to/file.txt')"
+          },
+          {
+            "title": "example",
+            "description": "get('/path/to/file.xlsx', '/local/path/file.xlsx')"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": "Path to remote file",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "filePath"
+          },
+          {
+            "title": "param",
+            "description": "Optional local path to save file (if not provided, returns file content)",
+            "type": {
+              "type": "OptionalType",
+              "expression": {
+                "type": "NameExpression",
+                "name": "string"
+              }
+            },
+            "name": "localPath"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "getCSV",
+      "params": [
+        "filePath",
+        "parsingOptions"
+      ],
+      "docs": {
+        "description": "Get a CSV and return a JSON array of strings for each item separated by the delimiter",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "getCSV(\n  '/some/path/to_file.csv',\n  {delimiter: \";\", flatKeys: true }\n);"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": "Path to resource",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "filePath"
+          },
+          {
+            "title": "param",
+            "description": "Optional. `parsingOptions` Parsing options which can be passed to convert csv to json See more {@link https://github.com/Keyang/node-csvtojson#parameters on csvtojson docs}",
+            "type": {
+              "type": "OptionalType",
+              "expression": {
+                "type": "RecordType",
+                "fields": [
+                  {
+                    "type": "FieldType",
+                    "key": "readStreamOptions",
+                    "value": {
+                      "type": "NameExpression",
+                      "name": "object"
+                    }
+                  },
+                  {
+                    "type": "FieldType",
+                    "key": "delimiter",
+                    "value": {
+                      "type": "NameExpression",
+                      "name": "string"
+                    }
+                  },
+                  {
+                    "type": "FieldType",
+                    "key": "noheader",
+                    "value": {
+                      "type": "NameExpression",
+                      "name": "boolean"
+                    }
+                  },
+                  {
+                    "type": "FieldType",
+                    "key": "quote",
+                    "value": {
+                      "type": "NameExpression",
+                      "name": "string"
+                    }
+                  },
+                  {
+                    "type": "FieldType",
+                    "key": "trim",
+                    "value": {
+                      "type": "NameExpression",
+                      "name": "boolean"
+                    }
+                  },
+                  {
+                    "type": "FieldType",
+                    "key": "flatKeys",
+                    "value": {
+                      "type": "NameExpression",
+                      "name": "boolean"
+                    }
+                  },
+                  {
+                    "type": "FieldType",
+                    "key": "output",
+                    "value": {
+                      "type": "NameExpression",
+                      "name": "string"
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "parsingOptions"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "putCSV",
+      "params": [
+        "localFilePath",
+        "remoteFilePath",
+        "parsingOptions"
+      ],
+      "docs": {
+        "description": "Convert JSON to CSV and upload to an FTP server",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "putCSV(\n  '/some/path/to_local_file.csv',\n  '/some/path/to_remove_file.csv',\n  { delimiter: ';', noheader: true }\n);"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": " Data source for data to copy to the remote server.",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "localFilePath"
+          },
+          {
+            "title": "param",
+            "description": "Path to the remote file to be created on the server.",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "remoteFilePath"
+          },
+          {
+            "title": "param",
+            "description": "Options which can be passed to adjust the read and write stream used in sending the data to the remote server",
+            "type": {
+              "type": "NameExpression",
+              "name": "object"
+            },
+            "name": "parsingOptions"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "getJSON",
+      "params": [
+        "filePath",
+        "encoding"
+      ],
+      "docs": {
+        "description": "Fetch a json file from an FTP server",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "getJSON(\n  '/path/To/File',\n  'utf8',\n);"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": "Path to resource",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "filePath"
+          },
+          {
+            "title": "param",
+            "description": "Character encoding for the json",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "encoding"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "getExcelMetadata",
+      "params": [
+        "filePath",
+        "chunkSize",
+        "options"
+      ],
+      "docs": {
+        "description": "Get metadata about an Excel file for chunk processing",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "getExcelMetadata('/path/to/file.xlsx', 5000)"
+          },
+          {
+            "title": "example",
+            "description": "getExcelMetadata('/path/to/file.xlsx', 5000, {\n  columnMapping: {\n    regions: ['Region', 'region'],\n    zones: ['Zone', 'zone'],\n    districts: ['District', 'district'],\n    sites: ['Site', 'site'],\n    hsectors: ['hsector', 'health_sector'],\n    quarters: ['Quarter', 'quarter'],\n    reportingPeriods: ['Reporting period', 'reporting_period'],\n    indicators: ['Indicator_name', 'indicator_name']\n  }\n})"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": "Path to the Excel file",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "filePath"
+          },
+          {
+            "title": "param",
+            "description": "Size of each chunk in rows",
+            "type": {
+              "type": "NameExpression",
+              "name": "number"
+            },
+            "name": "chunkSize"
+          },
+          {
+            "title": "param",
+            "description": "Optional parameters including columnMapping",
+            "type": {
+              "type": "NameExpression",
+              "name": "object"
+            },
+            "name": "options"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "getExcelChunk",
+      "params": [
+        "filePath",
+        "chunkIndex",
+        "chunkSize"
+      ],
+      "docs": {
+        "description": "Get a specific chunk of rows from an Excel file",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "getExcelChunk('/path/to/file.xlsx', 0, 5000)"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": "Path to the Excel file",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "filePath"
+          },
+          {
+            "title": "param",
+            "description": "Index of the chunk to retrieve (0-based)",
+            "type": {
+              "type": "NameExpression",
+              "name": "number"
+            },
+            "name": "chunkIndex"
+          },
+          {
+            "title": "param",
+            "description": "Size of each chunk in rows",
+            "type": {
+              "type": "NameExpression",
+              "name": "number"
+            },
+            "name": "chunkSize"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "normalizeCSVarray",
+      "params": [
+        "options",
+        "callback"
+      ],
+      "docs": {
+        "description": "Convert JSON array of strings into a normalized object",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "normalizeCSVarray({ delimiter: ';', noheader: true });"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": "Options passed to csvtojson parser",
+            "type": {
+              "type": "NameExpression",
+              "name": "options"
+            },
+            "name": "options"
+          },
+          {
+            "title": "param",
+            "description": "Options passed to csvtojson parser",
+            "type": {
+              "type": "NameExpression",
+              "name": "callback"
+            },
+            "name": "callback"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    }
+  ],
+  "exports": [],
+  "common": [
+    {
+      "name": "fn",
+      "params": [
+        "func"
+      ],
+      "docs": {
+        "description": "Creates a custom step (or operation) for more flexible job writing.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "fn(state => {\n  // do some things to state\n  return state;\n});"
+          },
+          {
+            "title": "param",
+            "description": "is the function",
+            "type": {
+              "type": "NameExpression",
+              "name": "Function"
+            },
+            "name": "func"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "fnIf",
+      "params": [
+        "condition",
+        "operation"
+      ],
+      "docs": {
+        "description": "A custom operation that will only execute the function if the condition returns true",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "fnIf((state) => state?.data?.name, get(\"https://example.com\"));"
+          },
+          {
+            "title": "param",
+            "description": "The condition that returns true",
+            "type": {
+              "type": "NameExpression",
+              "name": "Boolean"
+            },
+            "name": "condition"
+          },
+          {
+            "title": "param",
+            "description": "The operation needed to be executed.",
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            },
+            "name": "operation"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "sourceValue",
+      "params": [
+        "path"
+      ],
+      "docs": {
+        "description": "Picks out a single value from source data.\nIf a JSONPath returns more than one value for the reference, the first\nitem will be returned.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "sourceValue('$.key')"
+          },
+          {
+            "title": "param",
+            "description": "JSONPath referencing a point in `state`.",
+            "type": {
+              "type": "NameExpression",
+              "name": "String"
+            },
+            "name": "path"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "dataPath",
+      "params": [
+        "path"
+      ],
+      "docs": {
+        "description": "Ensures a path points at the data.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "dataPath('key')"
+          },
+          {
+            "title": "param",
+            "description": "JSONPath referencing a point in `data`.",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "path"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "dataValue",
+      "params": [
+        "path"
+      ],
+      "docs": {
+        "description": "Picks out a single value from the source data object—usually `state.data`.\nIf a JSONPath returns more than one value for the reference, the first\nitem will be returned.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "dataValue('key')"
+          },
+          {
+            "title": "param",
+            "description": "JSONPath referencing a point in `data`.",
+            "type": {
+              "type": "NameExpression",
+              "name": "String"
+            },
+            "name": "path"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "lastReferenceValue",
+      "params": [
+        "path"
+      ],
+      "docs": {
+        "description": "Picks out the last reference value from source data.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "lastReferenceValue('key')"
+          },
+          {
+            "title": "param",
+            "description": "JSONPath referencing a point in `references`.",
+            "type": {
+              "type": "NameExpression",
+              "name": "String"
+            },
+            "name": "path"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "each",
+      "params": [
+        "dataSource",
+        "operation"
+      ],
+      "docs": {
+        "description": "Iterates over an array of items and invokes an operation upon each one, where the state\nobject is _scoped_ so that state.data is the item under iteration.\nThe rest of the state object is untouched and can be referenced as usual.\nYou can pass an array directly, or use lazy state or a JSONPath string to\nreference a slice of state.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "each(\n  $.data,\n  // Inside the callback operation, `$.data` is scoped to the item under iteration\n  insert(\"patient\", {\n    patient_name: $.data.properties.case_name,\n    patient_id: $.data.case_id,\n  })\n);",
+            "caption": "Using lazy state ($) to iterate over items in state.data and pass each into an \"insert\" operation"
+          },
+          {
+            "title": "example",
+            "description": "each(\n  $.data,\n  insert(\"patient\", (state) => ({\n    patient_id: state.data.case_id,\n    ...state.data\n  }))\n);",
+            "caption": "Iterate over items in state.data and pass each one into an \"insert\" operation"
+          },
+          {
+            "title": "example",
+            "description": "each(\n  \"$.data[*]\",\n  insert(\"patient\", (state) => ({\n    patient_name: state.data.properties.case_name,\n    patient_id: state.data.case_id,\n  }))\n);",
+            "caption": "Using JSON path to iterate over items in state.data and pass each one into an \"insert\" operation"
+          },
+          {
+            "title": "param",
+            "description": "JSONPath referencing a point in `state`.",
+            "type": {
+              "type": "NameExpression",
+              "name": "DataSource"
+            },
+            "name": "dataSource"
+          },
+          {
+            "title": "param",
+            "description": "The operation needed to be repeated.",
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            },
+            "name": "operation"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "field",
+      "params": [
+        "key",
+        "value"
+      ],
+      "docs": {
+        "description": "Returns a key, value pair in an array.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "field('destination_field_name__c', 'value')"
+          },
+          {
+            "title": "param",
+            "description": "Name of the field",
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "key"
+          },
+          {
+            "title": "param",
+            "description": "The value itself or a sourceable operation.",
+            "type": {
+              "type": "NameExpression",
+              "name": "Value"
+            },
+            "name": "value"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Field"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "fields",
+      "params": [
+        "fields"
+      ],
+      "docs": {
+        "description": "Zips key value pairs into an object.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "fields(list_of_fields)"
+          },
+          {
+            "title": "param",
+            "description": "a list of fields",
+            "type": {
+              "type": "NameExpression",
+              "name": "Fields"
+            },
+            "name": "fields"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Object"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "merge",
+      "params": [
+        "dataSource",
+        "fields"
+      ],
+      "docs": {
+        "description": "Merges fields into each item in an array.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "example",
+            "description": "merge(\n  \"$.books[*]\",\n  fields(\n    field( \"publisher\", sourceValue(\"$.publisher\") )\n  )\n)"
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "param",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "DataSource"
+            },
+            "name": "dataSource"
+          },
+          {
+            "title": "param",
+            "description": "Group of fields to merge in.",
+            "type": {
+              "type": "NameExpression",
+              "name": "Object"
+            },
+            "name": "fields"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "DataSource"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "chunk",
+      "params": [
+        "array",
+        "chunkSize"
+      ],
+      "docs": {
+        "description": "Chunks an array into an array of arrays, each with no more than a certain size.",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "example",
+            "description": "chunk([1,2,3,4,5], 2)"
+          },
+          {
+            "title": "param",
+            "description": "Array to be chunked",
+            "type": {
+              "type": "NameExpression",
+              "name": "Object"
+            },
+            "name": "array"
+          },
+          {
+            "title": "param",
+            "description": "The maxiumum size of each chunks",
+            "type": {
+              "type": "NameExpression",
+              "name": "Integer"
+            },
+            "name": "chunkSize"
+          },
+          {
+            "title": "returns",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "Object"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "parseCsv",
+      "params": [
+        "csvData",
+        "parsingOptions",
+        "callback"
+      ],
+      "docs": {
+        "description": "Takes a CSV file string or stream and parsing options as input, and returns a promise that\nresolves to the parsed CSV data as an array of objects.\nOptions for `parsingOptions` include:\n- `delimiter` {string/Buffer/[string/Buffer]} - Defines the character(s) used to delineate the fields inside a record. Default: `','`\n- `quote` {string/Buffer/[string/Buffer]} - Defines the characters used to surround a field. Default: `'\"'`\n- `escape` {Buffer/string/null/boolean} - Set the escape character as one character/byte only. Default: `\"`\n- `columns` {boolean / array / function} - Generates record in the form of object literals. Default: `true`\n- `bom` {boolean} - Strips the {@link https://en.wikipedia.org/wiki/Byte_order_mark byte order mark (BOM)} from the input string or buffer. Default: `true`\n- `trim` {boolean} - Ignore whitespace characters immediately around the `delimiter`. Default: `true`\n- `ltrim` {boolean} - Ignore whitespace characters from the left side of a CSV field. Default: `true`\n- `rtrim` {boolean} - Ignore whitespace characters from the right side of a CSV field. Default: `true`\n- `chunkSize` {number} - The size of each chunk of CSV data. Default: `Infinity`\n- `skip_empty_lines` {boolean} - Ignore empty lines in the CSV file. Default: `true`",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "function",
+            "description": null,
+            "name": null
+          },
+          {
+            "title": "param",
+            "description": "A CSV string or a readable stream",
+            "type": {
+              "type": "UnionType",
+              "elements": [
+                {
+                  "type": "NameExpression",
+                  "name": "String"
+                },
+                {
+                  "type": "NameExpression",
+                  "name": "Stream"
+                }
+              ]
+            },
+            "name": "csvData"
+          },
+          {
+            "title": "param",
+            "description": "Optional. Parsing options for converting CSV to JSON.",
+            "type": {
+              "type": "OptionalType",
+              "expression": {
+                "type": "NameExpression",
+                "name": "Object"
+              }
+            },
+            "name": "parsingOptions"
+          },
+          {
+            "title": "param",
+            "description": "(Optional) callback function. If used it will be called state and an array of rows.",
+            "type": {
+              "type": "OptionalType",
+              "expression": {
+                "type": "NameExpression",
+                "name": "function"
+              }
+            },
+            "name": "callback"
+          },
+          {
+            "title": "returns",
+            "description": "The function returns a Promise that resolves to the result of parsing a CSV `stringOrStream`.",
+            "type": {
+              "type": "NameExpression",
+              "name": "Operation"
+            }
+          }
+        ]
+      },
+      "valid": true
+    }
+  ]
+}
