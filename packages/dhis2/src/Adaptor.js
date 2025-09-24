@@ -1,7 +1,9 @@
 import {
   execute as commonExecute,
   fn,
+  parseCsv,
 } from '@openfn/language-common';
+import { Readable } from 'stream';
 import { expandReferences, throwError } from '@openfn/language-common/util';
 import {
   handleResponse,
@@ -951,6 +953,72 @@ export function getExcelChunk(filePath, chunkIndex = 0, chunkSize = 5000, option
       console.error('❌ DHIS2: Excel chunk reading failed:', error.message);
       throw new Error(`Excel chunk reading failed: ${error.message}`);
     }
+  };
+}
+
+/**
+ * Read CSV metadata via SFTP (row counts and chunking info)
+ * @public
+ * @param {string} filePath
+ * @param {number} chunkSize
+ * @param {object} options - csv parser options (columns, bom, skip_empty_lines, delimiter, etc.)
+ */
+export function getCsvMetadata(filePath, chunkSize = 5000, options = {}) {
+  return async state => {
+    if (!sftpClient || !sftpClient.sftp) {
+      throw new Error('DHIS2 getCsvMetadata: No SFTP connection available. Use executeWithSftp().');
+    }
+    const buffer = await sftpClient.get(filePath);
+    const stream = Readable.from(buffer.toString('utf8'));
+    const parsed = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, ...options })(state);
+    const rows = Array.isArray(parsed.data) ? parsed.data : [];
+    const totalRows = rows.length;
+    const totalChunks = Math.ceil(totalRows / chunkSize);
+    return {
+      ...state,
+      data: {
+        fileName: filePath,
+        totalRows,
+        chunkSize,
+        totalChunks,
+        metadata: { processedAt: new Date().toISOString(), processingMethod: 'csv-rows' }
+      }
+    };
+  };
+}
+
+/**
+ * Read a specific CSV chunk via SFTP
+ * @public
+ * @param {string} filePath
+ * @param {number} chunkIndex
+ * @param {number} chunkSize
+ * @param {object} options - csv parser options
+ */
+export function getCsvChunk(filePath, chunkIndex = 0, chunkSize = 5000, options = {}) {
+  return async state => {
+    if (!sftpClient || !sftpClient.sftp) {
+      throw new Error('DHIS2 getCsvChunk: No SFTP connection available. Use executeWithSftp().');
+    }
+    const buffer = await sftpClient.get(filePath);
+    const stream = Readable.from(buffer.toString('utf8'));
+    const parsed = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, ...options })(state);
+    const rows = Array.isArray(parsed.data) ? parsed.data : [];
+    const start = chunkIndex * chunkSize;
+    const end = Math.min(start + chunkSize, rows.length);
+    const slice = rows.slice(start, end);
+    return {
+      ...state,
+      chunkData: slice,
+      chunkMetadata: {
+        chunkIndex,
+        chunkSize,
+        rowsInChunk: slice.length,
+        filePath,
+        processedAt: new Date().toISOString(),
+        processingMethod: 'csv-rows'
+      }
+    };
   };
 }
 

@@ -8,7 +8,7 @@ echo "🏗️  Building and deploying OpenFn adaptors using pnpm deploy..."
 
 # Install dependencies
 echo "📦 Installing workspace dependencies..."
-pnpm install
+pnpm install --force
 
 # Build the specific packages we need
 echo "🔨 Building @openfn/language-common..."

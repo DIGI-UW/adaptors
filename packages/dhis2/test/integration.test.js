@@ -1,4 +1,5 @@
 import { expect } from 'chai';
+import * as td from 'testdouble';
 import { create, get, upsert } from '../src/Adaptor.js';
 
 // =============================================================================
@@ -122,5 +123,46 @@ describe('DHIS2 Integration Tests', () => {
   after(async function() {
     this.timeout(timeout);
     console.log('ℹ️  Skipping cleanup. You may want to manually delete the test org unit.');
+  });
+}); 
+
+describe('DHIS2 adaptor SFTP helpers', () => {
+  let executeWithSftp, getCsvMetadata, getCsvChunk;
+
+  before(async () => {
+    // Mock ssh2-sftp-client used internally by DHIS2 adaptor
+    const Client = td.func();
+    const sftp = { connect: td.func(), get: td.func(), end: td.func(), sftp: { state: 'ready' } };
+    td.when(new Client()).thenReturn(sftp);
+    td.when(sftp.connect(td.matchers.anything())).thenResolve();
+    td.when(sftp.end()).thenResolve();
+
+    const csv = 'a,b\n1,2\n3,4\n5,6\n';
+    td.when(sftp.get('/data/file.csv')).thenResolve(Buffer.from(csv, 'utf8'));
+
+    await td.replaceEsm('ssh2-sftp-client', { default: Client });
+
+    ({ executeWithSftp, getCsvMetadata, getCsvChunk } = await import('../src/Adaptor.js'));
+  });
+
+  after(() => td.reset());
+
+  it('compute CSV metadata via executeWithSftp', async () => {
+    const state = { configuration: { hostUrl: 'http://example', apiVersion: '42', sftpConfiguration: { host: 's' } } };
+    const finalState = await executeWithSftp(
+      getCsvMetadata('/data/file.csv', 2)
+    )(state);
+    expect(finalState.data.totalRows).to.equal(3);
+    expect(finalState.data.totalChunks).to.equal(2);
+  });
+
+  it('read CSV chunk via executeWithSftp', async () => {
+    const state = { configuration: { hostUrl: 'http://example', apiVersion: '42', sftpConfiguration: { host: 's' } } };
+    const finalState = await executeWithSftp(
+      getCsvChunk('/data/file.csv', 1, 2)
+    )(state);
+    expect(finalState.chunkData).to.be.an('array');
+    expect(finalState.chunkData.length).to.equal(1);
+    expect(finalState.chunkData[0]).to.have.property('a');
   });
 }); 

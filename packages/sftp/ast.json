@@ -641,6 +641,108 @@
       "valid": true
     },
     {
+      "name": "getCsvMetadata",
+      "params": [
+        "filePath",
+        "chunkSize",
+        "options"
+      ],
+      "docs": {
+        "description": "Get CSV metadata (row counts, chunk count) via SFTP",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "param",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "filePath"
+          },
+          {
+            "title": "param",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "number"
+            },
+            "name": "chunkSize"
+          },
+          {
+            "title": "param",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "object"
+            },
+            "name": "options"
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "getCsvChunk",
+      "params": [
+        "filePath",
+        "chunkIndex",
+        "chunkSize",
+        "options"
+      ],
+      "docs": {
+        "description": "Get a CSV chunk (array of row objects) via SFTP",
+        "tags": [
+          {
+            "title": "public",
+            "description": null,
+            "type": null
+          },
+          {
+            "title": "param",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "string"
+            },
+            "name": "filePath"
+          },
+          {
+            "title": "param",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "number"
+            },
+            "name": "chunkIndex"
+          },
+          {
+            "title": "param",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "number"
+            },
+            "name": "chunkSize"
+          },
+          {
+            "title": "param",
+            "description": null,
+            "type": {
+              "type": "NameExpression",
+              "name": "object"
+            },
+            "name": "options"
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
       "name": "normalizeCSVarray",
       "params": [
         "options",

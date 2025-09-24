@@ -1,9 +1,9 @@
-import { composeNextState } from '@openfn/language-common';
-import {
-  request as commonRequest,
+import { composeNextState, util as commonUtil } from '@openfn/language-common';
+const {
+  request: commonRequest,
   makeBasicAuthHeader,
   logResponse,
-} from '@openfn/language-common/util';
+} = commonUtil;
 
 export function shouldUseNewTracker(resourceType) {
   return /^(enrollments|relationships|events|trackedEntities)$/.test(
@@ -120,8 +120,19 @@ export function handleResponse(result, state) {
     console.error('DHIS2 API Error:', message);
     throw new Error(message);
   }
-  state.data = result.data;
-  state.response = result;
+
+  const updateState = currentState => {
+    const nextState = composeNextState(currentState, result.data);
+    nextState.response = result;
+    return nextState;
+  };
+
+  if (state.infoFunction) {
+    const nextState = state.infoFunction(state, result, updateState);
+    return nextState ? nextState : updateState(state);
+  }
+
+  return updateState(state);
 }
 
 export function prettyJson(data) {

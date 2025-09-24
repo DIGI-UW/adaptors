@@ -1,8 +1,9 @@
 import chai from 'chai';
-import { execute, create, update, upsert, get } from '../src/Adaptor';
-import { dataValue } from '@openfn/language-common';
-import { enableMockClient } from '@openfn/language-common/util';
-import * as util from '../src/util';
+import { execute, create, update, upsert, get } from '../src/Adaptor.js';
+import { dataValue, util as commonUtil } from '@openfn/language-common';
+
+const { enableMockClient } = commonUtil;
+import * as util from '../src/util.js';
 
 const { expect } = chai;
 
@@ -255,7 +256,7 @@ describe('create', () => {
     // The specific error from the mock client proves the `request` function was
     // called correctly. If `configuration` were undefined, we would have gotten
     // a `ReferenceError` instead.
-    expect(error.message).to.match(/No matching mock handler/);
+    expect(error.message).to.match(/No matching mock handler|Mock dispatch not matched/);
   });
 });
 
