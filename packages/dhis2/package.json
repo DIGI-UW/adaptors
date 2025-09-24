@@ -47,11 +47,11 @@
     "xlstream": "^2.5.5"
   },
   "devDependencies": {
-    "assertion-error": "2.0.0",
     "chai": "4.3.6",
     "chai-http": "4.3.0",
     "deep-eql": "4.1.1",
     "jsonpath": "^1.1.1",
+    "mocha": "^10.2.0",
     "rimraf": "3.0.2"
   },
   "type": "module",

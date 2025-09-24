@@ -926,6 +926,83 @@ export function getExcelChunk(filePath, chunkIndex, chunkSize) {
 }
 
 /**
+ * Get CSV metadata (row counts, chunk count) via SFTP
+ * @public
+ * @param {string} filePath
+ * @param {number} chunkSize
+ * @param {object} options
+ */
+export function getCsvMetadata(filePath, chunkSize = 5000, options = {}) {
+  return async state => {
+    if (!sftp || !sftp.sftp) {
+      const error = new Error('SFTP operation failed: not connected to server');
+      console.error('❌ SFTP:', error.message);
+      throw error;
+    }
+    const startTime = Date.now();
+    const buffer = await sftp.get(filePath);
+    const stream = Readable.from(buffer.toString('utf8'));
+    const parsedState = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, ...options })(state);
+    const rows = Array.isArray(parsedState.data) ? parsedState.data : [];
+    const totalRows = rows.length;
+    const totalChunks = Math.ceil(totalRows / chunkSize);
+    const duration = Date.now() - startTime;
+    console.log('✅ SFTP: CSV metadata parsed in', `${duration}ms`, 'rows:', totalRows, 'chunks:', totalChunks);
+    return {
+      ...state,
+      data: {
+        fileName: filePath,
+        totalRows,
+        chunkSize,
+        totalChunks,
+        metadata: { processedAt: new Date().toISOString(), processingMethod: 'csv-rows' }
+      }
+    };
+  };
+}
+
+/**
+ * Get a CSV chunk (array of row objects) via SFTP
+ * @public
+ * @param {string} filePath
+ * @param {number} chunkIndex
+ * @param {number} chunkSize
+ * @param {object} options
+ */
+export function getCsvChunk(filePath, chunkIndex = 0, chunkSize = 5000, options = {}) {
+  return async state => {
+    if (!sftp || !sftp.sftp) {
+      const error = new Error('SFTP operation failed: not connected to server');
+      console.error('❌ SFTP:', error.message);
+      throw error;
+    }
+    const startTime = Date.now();
+    const buffer = await sftp.get(filePath);
+    const stream = Readable.from(buffer.toString('utf8'));
+    const parsedState = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, ...options })(state);
+    const rows = Array.isArray(parsedState.data) ? parsedState.data : [];
+    const start = chunkIndex * chunkSize;
+    const end = Math.min(start + chunkSize, rows.length);
+    const slice = rows.slice(start, end);
+    const duration = Date.now() - startTime;
+    console.log('✅ SFTP: CSV chunk parsed in', `${duration}ms`, 'chunk rows:', slice.length);
+    return {
+      ...state,
+      chunkData: slice,
+      chunkMetadata: {
+        chunkIndex,
+        chunkNumber: chunkIndex + 1,
+        chunkSize,
+        actualRows: slice.length,
+        fileName: filePath,
+        processedAt: new Date().toISOString(),
+        processingMethod: 'csv-rows'
+      }
+    };
+  };
+}
+
+/**
  * Process Excel file to get metadata without loading data
  * @private
  */
@@ -1078,7 +1155,7 @@ async function processExcelMetadata(buffer, filePath, chunkSize, options = {}) {
             console.log('✅ SFTP: Metadata processing completed on stream close');
             finished = true;
             cleanupTempFile();
-            resolve(createMetadataResult(totalRows, chunkSize, filePath, uniqueValues, hierarchyRelations));
+            resolve(createMetadataResult(totalRows, chunkSize, filePath, uniqueValues, orgUnitParentMap));
           }
         });
         

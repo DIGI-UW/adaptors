@@ -3,6 +3,7 @@ import { expect } from 'chai';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { Readable } from 'stream';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -163,5 +164,44 @@ describe('getExcelMetadata Tests', () => {
     }
     
     console.log(`✅ Successfully processed ${result.data.totalRows} rows in ${result.data.totalChunks} chunks`);
+  });
+}); 
+
+describe('SFTP CSV helpers', () => {
+  let getCsvMetadata, getCsvChunk, connect;
+
+  before(async () => {
+    // Mock ssh2-sftp-client that returns a small CSV buffer
+    const Client = td.func();
+    const sftp = { connect: td.func(), get: td.func(), end: td.func(), sftp: { state: 'ready' } };
+    td.when(new Client()).thenReturn(sftp);
+    td.when(sftp.connect(td.matchers.anything())).thenResolve();
+    td.when(sftp.end()).thenResolve();
+
+    const csv = 'Region,Zone,District,Site\nR1,Z1,D1,S1\nR1,Z2,D2,S2\nR2,Z3,D3,S3\n';
+    td.when(sftp.get('/data/sample.csv')).thenResolve(Buffer.from(csv, 'utf8'));
+
+    await td.replaceEsm('ssh2-sftp-client', { default: Client });
+
+    ({ getCsvMetadata, getCsvChunk, connect } = await import('../src/Adaptor.js'));
+  });
+
+  after(() => td.reset());
+
+  it('computes CSV metadata', async () => {
+    const state = { configuration: { host: 'test-host' } };
+    await connect(state);
+    const res = await getCsvMetadata('/data/sample.csv', 2)({ ...state });
+    expect(res.data.totalRows).to.equal(3);
+    expect(res.data.totalChunks).to.equal(2);
+  });
+
+  it('reads a CSV chunk', async () => {
+    const state = { configuration: { host: 'test-host' } };
+    await connect(state);
+    const res = await getCsvChunk('/data/sample.csv', 1, 2)({ ...state });
+    expect(res.chunkData).to.be.an('array');
+    expect(res.chunkData.length).to.equal(1);
+    expect(res.chunkData[0]).to.have.property('Region');
   });
 }); 
