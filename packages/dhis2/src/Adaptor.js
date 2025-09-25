@@ -30,6 +30,11 @@ import { acquireLock, releaseLock } from './locks.js';
  */
 let sftpClient = null;
 
+// Test helper: allow injecting a mock SFTP client in tests
+export function __setSftpClientForTests(client) {
+  sftpClient = client;
+}
+
 /**
  * Options object
  * @typedef {Object} RequestOptions
@@ -969,8 +974,22 @@ export function getCsvMetadata(filePath, chunkSize = 5000, options = {}) {
       throw new Error('DHIS2 getCsvMetadata: No SFTP connection available. Use executeWithSftp().');
     }
     const buffer = await sftpClient.get(filePath);
-    const stream = Readable.from(buffer.toString('utf8'));
-    const parsed = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, ...options })(state);
+    // Filter rows whose column count differs from header (drop mid-file MMD segment)
+    const raw = buffer.toString('utf8');
+    const lines = raw.split(/\r?\n/);
+    const header = lines[0] || '';
+    const headerCount = (header.match(/,/g) || []).length + 1;
+    const filtered = lines
+      .filter((line, idx) => {
+        const trimmed = (line || '').trim();
+        if (!trimmed) return false; // drop empty
+        if (idx === 0) return true; // keep header
+        const count = (line.match(/,/g) || []).length + 1;
+        return count === headerCount;
+      })
+      .join('\n');
+    const stream = Readable.from(filtered);
+    const parsed = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, relax_column_count: true, relax_column_count_more: true, relax_column_count_less: true, ...options })(state);
     const rows = Array.isArray(parsed.data) ? parsed.data : [];
     const totalRows = rows.length;
     const totalChunks = Math.ceil(totalRows / chunkSize);
@@ -1001,8 +1020,22 @@ export function getCsvChunk(filePath, chunkIndex = 0, chunkSize = 5000, options 
       throw new Error('DHIS2 getCsvChunk: No SFTP connection available. Use executeWithSftp().');
     }
     const buffer = await sftpClient.get(filePath);
-    const stream = Readable.from(buffer.toString('utf8'));
-    const parsed = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, ...options })(state);
+    // Filter rows whose column count differs from header (drop mid-file MMD segment)
+    const raw = buffer.toString('utf8');
+    const lines = raw.split(/\r?\n/);
+    const header = lines[0] || '';
+    const headerCount = (header.match(/,/g) || []).length + 1;
+    const filtered = lines
+      .filter((line, idx) => {
+        const trimmed = (line || '').trim();
+        if (!trimmed) return false; // drop empty
+        if (idx === 0) return true; // keep header
+        const count = (line.match(/,/g) || []).length + 1;
+        return count === headerCount;
+      })
+      .join('\n');
+    const stream = Readable.from(filtered);
+    const parsed = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, relax_column_count: true, relax_column_count_more: true, relax_column_count_less: true, ...options })(state);
     const rows = Array.isArray(parsed.data) ? parsed.data : [];
     const start = chunkIndex * chunkSize;
     const end = Math.min(start + chunkSize, rows.length);

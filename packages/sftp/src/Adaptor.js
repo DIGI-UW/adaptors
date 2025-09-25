@@ -941,8 +941,22 @@ export function getCsvMetadata(filePath, chunkSize = 5000, options = {}) {
     }
     const startTime = Date.now();
     const buffer = await sftp.get(filePath);
-    const stream = Readable.from(buffer.toString('utf8'));
-    const parsedState = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, ...options })(state);
+    // Filter out lines with a different column count than the header (drops mid-file MMD section)
+    const raw = buffer.toString('utf8');
+    const lines = raw.split(/\r?\n/);
+    const header = lines[0] || '';
+    const headerCount = (header.match(/,/g) || []).length + 1;
+    const filtered = lines
+      .filter((line, idx) => {
+        const trimmed = (line || '').trim();
+        if (!trimmed) return false; // drop empty
+        if (idx === 0) return true; // keep header
+        const count = (line.match(/,/g) || []).length + 1;
+        return count === headerCount;
+      })
+      .join('\n');
+    const stream = Readable.from(filtered);
+    const parsedState = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, relax_column_count: true, relax_column_count_more: true, relax_column_count_less: true, ...options })(state);
     const rows = Array.isArray(parsedState.data) ? parsedState.data : [];
     const totalRows = rows.length;
     const totalChunks = Math.ceil(totalRows / chunkSize);
@@ -978,8 +992,22 @@ export function getCsvChunk(filePath, chunkIndex = 0, chunkSize = 5000, options 
     }
     const startTime = Date.now();
     const buffer = await sftp.get(filePath);
-    const stream = Readable.from(buffer.toString('utf8'));
-    const parsedState = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, ...options })(state);
+    // Filter out lines with a different column count than the header (drops mid-file MMD section)
+    const raw = buffer.toString('utf8');
+    const lines = raw.split(/\r?\n/);
+    const header = lines[0] || '';
+    const headerCount = (header.match(/,/g) || []).length + 1;
+    const filtered = lines
+      .filter((line, idx) => {
+        const trimmed = (line || '').trim();
+        if (!trimmed) return false; // drop empty
+        if (idx === 0) return true; // keep header
+        const count = (line.match(/,/g) || []).length + 1;
+        return count === headerCount;
+      })
+      .join('\n');
+    const stream = Readable.from(filtered);
+    const parsedState = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, relax_column_count: true, relax_column_count_more: true, relax_column_count_less: true, ...options })(state);
     const rows = Array.isArray(parsedState.data) ? parsedState.data : [];
     const start = chunkIndex * chunkSize;
     const end = Math.min(start + chunkSize, rows.length);
