@@ -749,7 +749,6 @@ export function upsertOrganisationUnitHierarchy(
     }
 
     const mappings = {}; // Map name to ID
-    const responses = []; // Collect all individual responses
 
     const orgUnitsByLevel = orgUnitStructures.reduce((acc, ou) => {
       acc[ou.level] = acc[ou.level] || [];
@@ -788,34 +787,58 @@ export function upsertOrganisationUnitHierarchy(
         );
 
         try {
-          await upsertOp(state); // This mutates state
+          const resultState = await upsertOp(state); // returns next state (also mutates)
 
-          // Deep copy the response before it's overwritten by the next operation
-          const responseData = JSON.parse(JSON.stringify(state.data));
-          responses.push(responseData);
+          // Primary: standard DHIS2 import response
+          let newId = resultState?.data?.response?.uid;
 
-          if (responseData.response?.uid) {
-            const newId = responseData.response.uid;
+          // Fallback 1: Location header
+          if (!newId) {
+            try {
+              const loc = String(resultState?.response?.headers?.location || '');
+              const match = loc.match(/[A-Za-z0-9]{11}/);
+              if (match) newId = match[0];
+            } catch (_) {}
+          }
+
+          // Fallback 2: direct uid field (varies by DHIS2 versions)
+          if (!newId && resultState?.data && typeof resultState.data === 'object') {
+            if (typeof resultState.data.uid === 'string' && resultState.data.uid.length === 11) {
+              newId = resultState.data.uid;
+            }
+          }
+
+          // Fallback 3: GET by code
+          if (!newId) {
+            try {
+              await get('organisationUnits', { filter: `code:eq:${orgUnit.code}`, fields: 'id' })(resultState || state);
+              const found = (resultState?.data?.organisationUnits || state.data?.organisationUnits || [])[0];
+              if (found?.id) newId = found.id;
+            } catch (_) {}
+          }
+
+          if (newId) {
             mappings[orgUnit.name] = newId;
+            console.log(`   ✅ Mapped: '${orgUnit.name}' → ${newId}`);
           } else {
-            console.error(
-              `   ❌ ERROR: Could not determine UID from upsert response for '${orgUnit.name}'.`
-            );
+            console.error(`   ❌ ERROR: Could not determine UID for '${orgUnit.name}' after upsert.`);
+            try {
+              console.error(`   🔍 Debug resultState.data:`, JSON.stringify(resultState?.data, null, 2));
+              console.error(`   🔍 Debug resultState.response.headers:`, JSON.stringify(resultState?.response?.headers || {}, null, 2));
+            } catch (_) {}
           }
         } catch (error) {
           console.error(
             `   ❌ Failed to upsert: ${orgUnit.name}. Error: ${error.message}`
           );
-          responses.push({
-            error: error.message,
-            orgUnit: orgUnit.name,
-          });
+          // Log error but continue processing other org units
         }
       }
     }
 
-    // Set the final state to a combined report of all operations
-    state.data = { mappings, responses };
+    // Set the final state to mappings (preserve existing data)
+    state.data = { ...state.data, mappings };
+    return state;
   };
 }
 
@@ -974,20 +997,7 @@ export function getCsvMetadata(filePath, chunkSize = 5000, options = {}) {
       throw new Error('DHIS2 getCsvMetadata: No SFTP connection available. Use executeWithSftp().');
     }
     const buffer = await sftpClient.get(filePath);
-    // Filter rows whose column count differs from header (drop mid-file MMD segment)
-    const raw = buffer.toString('utf8');
-    const lines = raw.split(/\r?\n/);
-    const header = lines[0] || '';
-    const headerCount = (header.match(/,/g) || []).length + 1;
-    const filtered = lines
-      .filter((line, idx) => {
-        const trimmed = (line || '').trim();
-        if (!trimmed) return false; // drop empty
-        if (idx === 0) return true; // keep header
-        const count = (line.match(/,/g) || []).length + 1;
-        return count === headerCount;
-      })
-      .join('\n');
+    const filtered = _sanitizeCsvText(buffer.toString('utf8'));
     const stream = Readable.from(filtered);
     const parsed = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, relax_column_count: true, relax_column_count_more: true, relax_column_count_less: true, ...options })(state);
     const rows = Array.isArray(parsed.data) ? parsed.data : [];
@@ -1020,20 +1030,7 @@ export function getCsvChunk(filePath, chunkIndex = 0, chunkSize = 5000, options 
       throw new Error('DHIS2 getCsvChunk: No SFTP connection available. Use executeWithSftp().');
     }
     const buffer = await sftpClient.get(filePath);
-    // Filter rows whose column count differs from header (drop mid-file MMD segment)
-    const raw = buffer.toString('utf8');
-    const lines = raw.split(/\r?\n/);
-    const header = lines[0] || '';
-    const headerCount = (header.match(/,/g) || []).length + 1;
-    const filtered = lines
-      .filter((line, idx) => {
-        const trimmed = (line || '').trim();
-        if (!trimmed) return false; // drop empty
-        if (idx === 0) return true; // keep header
-        const count = (line.match(/,/g) || []).length + 1;
-        return count === headerCount;
-      })
-      .join('\n');
+    const filtered = _sanitizeCsvText(buffer.toString('utf8'));
     const stream = Readable.from(filtered);
     const parsed = await parseCsv(stream, { columns: true, skip_empty_lines: true, bom: true, relax_column_count: true, relax_column_count_more: true, relax_column_count_less: true, ...options })(state);
     const rows = Array.isArray(parsed.data) ? parsed.data : [];
@@ -1053,6 +1050,29 @@ export function getCsvChunk(filePath, chunkIndex = 0, chunkSize = 5000, options 
       }
     };
   };
+}
+
+/**
+ * Sanitize CSV text by removing empty lines, duplicate header rows mid-file,
+ * and rows with a column count different from the header.
+ * @private
+ */
+function _sanitizeCsvText(raw) {
+  const lines = String(raw || '').split(/\r?\n/);
+  const header = lines[0] || '';
+  const headerCount = (header.match(/,/g) || []).length + 1;
+  return lines
+    .filter((line, idx) => {
+      const trimmed = (line || '').trim();
+      if (!trimmed) return false; // drop empty
+      if (idx === 0) return true; // keep header
+      const count = (line.match(/,/g) || []).length + 1;
+      if (count !== headerCount) return false; // drop rows with mismatched columns
+      // drop duplicate header rows mid-file (case/space-insensitive compare)
+      if (trimmed.replace(/\s+/g, '').toLowerCase() === header.replace(/\s+/g, '').toLowerCase()) return false;
+      return true;
+    })
+    .join('\n');
 }
 
 /**
