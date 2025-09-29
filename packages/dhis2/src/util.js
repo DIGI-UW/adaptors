@@ -143,6 +143,39 @@ export function ensureArray(data, key) {
   return Array.isArray(data) ? { [key]: data } : { [key]: [data] };
 }
 
+// Generate a stable DHIS2 code from a display name
+export function generateCodeFromName(name) {
+  return String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .substring(0, 50);
+}
+
+// Normalize various period formats to YYYYMM (monthly) for dataValueSets
+export function normalizePeriod(p) {
+  if (!p) return p;
+  const s = String(p);
+  const yyyymm = s.match(/^(\d{6})$/);
+  if (yyyymm) return yyyymm[1];
+  const iso = Date.parse(s);
+  if (!Number.isNaN(iso)) {
+    const d = new Date(iso);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    return `${y}${m}`;
+  }
+  const q = s.match(/^(\d{4})Q([1-4])$/i);
+  if (q) {
+    const year = q[1];
+    const quarter = Number(q[2]);
+    const month = (quarter - 1) * 3 + 1;
+    return `${year}${String(month).padStart(2, '0')}`;
+  }
+  return s;
+}
+
 export function prefixVersionToPath(
   configuration,
   options,
@@ -184,6 +217,10 @@ export const configureAuth = (auth, headers = {}) => {
 };
 
 export async function request(configuration, requestData) {
+  // Test-only override hook
+  if (request.__override) {
+    return await request.__override(configuration, requestData);
+  }
   const { hostUrl } = configuration;
   const { method, path, options = {}, data = {} } = requestData;
 
@@ -193,7 +230,53 @@ export async function request(configuration, requestData) {
     parseAs = 'json',
   } = options;
 
-  if (options) console.log(`with params: `, query);
+  // Some callers may pass { query: { query: {...} } } by mistake. Flatten it.
+  const normalizedQuery = (query && typeof query === 'object' && !Array.isArray(query) && 'query' in query && typeof query.query === 'object')
+    ? query.query
+    : query;
+
+  if (options) console.log(`with params: `, normalizedQuery);
+
+  // TEMP DEBUG (unsafe): log the credentials used for this request
+  try {
+    const p = String(configuration?.password || '');
+    const user = String(configuration?.username || '');
+    let authHeader = '';
+    try {
+      const hdr = makeBasicAuthHeader(user, p);
+      authHeader = hdr?.Authorization || '';
+    } catch (_) {}
+    console.log(
+      'ADA AUTH DEBUG:',
+      `host=${String(hostUrl || '')}`,
+      `user=${user}`,
+      `pw_raw=${p}`,
+      `auth=${authHeader}`,
+      `pat=${configuration?.pat ? '[set]' : '(none)'}`
+    );
+  } catch (_) {}
+
+  // Detailed request logging for reproducibility (e.g., Postman)
+  try {
+    const base = String(hostUrl || '').replace(/\/+$/, '');
+    const fullUrl = `${base}${path}`;
+    const qs = new URLSearchParams(normalizedQuery || {}).toString();
+    const urlWithQuery = qs ? `${fullUrl}?${qs}` : fullUrl;
+    console.log('ADA HTTP Request:', method, urlWithQuery);
+    if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+      let preview = '';
+      try {
+        preview = JSON.stringify(data);
+      } catch (e) {
+        preview = '[unserializable payload]';
+      }
+      // Truncate large payloads to keep logs readable
+      if (preview && preview.length > 2000) preview = preview.slice(0, 2000) + '…';
+      console.log('ADA HTTP Payload Preview:', preview);
+    }
+  } catch (e) {
+    // best-effort logging only
+  }
 
   const authHeaders = configureAuth(configuration, headers);
 
@@ -202,7 +285,7 @@ export async function request(configuration, requestData) {
       ...authHeaders,
       ...headers,
     },
-    query,
+    query: normalizedQuery,
     parseAs,
     body: data,
     baseUrl: hostUrl,
@@ -219,6 +302,15 @@ export async function request(configuration, requestData) {
       data: body,
     };
   } catch (error) {
+    try {
+      const base = String(hostUrl || '').replace(/\/+$/, '');
+      const fullUrl = `${base}${path}`;
+      const q = (options && options.query) || {};
+      const flat = (q && typeof q === 'object' && 'query' in q && typeof q.query === 'object') ? q.query : q;
+      const qs = new URLSearchParams(flat || {}).toString();
+      const urlWithQuery = qs ? `${fullUrl}?${qs}` : fullUrl;
+      console.error('ADA HTTP Error:', method, urlWithQuery, '→', error.message);
+    } catch (_) {}
     console.error(`DHIS2 Request Failed: ${error.message}`);
     // Re-throw the error to ensure it propagates up to the job.
     throw error;
